@@ -29,4 +29,4 @@ jobs:
     - name: Execute build script
       run: |
         chmod +x ./build_kernel.sh
-        ./build_kernel.sh
+        ./build_kernel.sh output
