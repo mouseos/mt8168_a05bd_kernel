@@ -30,3 +30,10 @@ jobs:
       run: |
         chmod +x ./build_kernel.sh
         ./build_kernel.sh output
+
+    - name: Upload build output
+      uses: actions/upload-artifact@v2
+      with:
+        name: build-output
+        path: ./output
+
