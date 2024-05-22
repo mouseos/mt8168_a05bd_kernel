@@ -42,44 +42,6 @@
 #define TCPC_LOW_RP_DUTY		(100)		/* 10 % */
 #define TCPC_NORMAL_RP_DUTY	(330)		/* 33 % */
 
-#define typec_get_cc1()		\
-	tcpc_dev->typec_remote_cc[0]
-#define typec_get_cc2()		\
-	tcpc_dev->typec_remote_cc[1]
-#define typec_get_cc_res()	\
-	(tcpc_dev->typec_polarity ? typec_get_cc2() : typec_get_cc1())
-
-#define typec_check_cc1(cc)	\
-	(typec_get_cc1() == cc)
-
-#define typec_check_cc2(cc)	\
-	(typec_get_cc2() == cc)
-
-#define typec_check_cc(cc1, cc2)	\
-	(typec_check_cc1(cc1) && typec_check_cc2(cc2))
-
-#define typec_check_cc_both(res)	\
-	(typec_check_cc(res, res))
-
-#define typec_check_cc_any(res)		\
-	(typec_check_cc1(res) || typec_check_cc2(res))
-
-#define typec_is_drp_toggling() \
-	(typec_get_cc1() == TYPEC_CC_DRP_TOGGLING)
-
-#define typec_is_cc_open()	\
-	typec_check_cc_both(TYPEC_CC_VOLT_OPEN)
-
-#define typec_is_cable_only()	\
-	(typec_get_cc1() + typec_get_cc2() == TYPEC_CC_VOLT_RA)
-
-#define typec_is_sink_with_emark()	\
-	(typec_get_cc1() + typec_get_cc2() == \
-	TYPEC_CC_VOLT_RA+TYPEC_CC_VOLT_RD)
-
-#define typec_is_cc_no_res()	\
-	(typec_is_drp_toggling() || typec_is_cc_open())
-
 /* provide to TCPC interface */
 extern int tcpci_report_usb_port_changed(struct tcpc_device *tcpc);
 extern int tcpci_set_wake_lock(

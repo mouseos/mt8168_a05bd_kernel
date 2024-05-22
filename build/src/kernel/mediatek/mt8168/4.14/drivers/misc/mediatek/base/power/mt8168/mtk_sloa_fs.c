@@ -28,7 +28,6 @@
 #include "mtk_sloa_fs.h"
 #include <pmic_api.h>
 
-static bool is_conn2ap_wakeup;
 static void __iomem *scpsys_base;	/* 0x10006000 */
 
 /* SMC call's marco */
@@ -38,7 +37,6 @@ static void __iomem *scpsys_base;	/* 0x10006000 */
 
 #define BUF_SIZE	(PAGE_SIZE / 4)
 #define UN_INIT		(100)
-#define R12_CONN2AP_WAKEUP_B	(5)
 
 /* scpsys */
 #define SPM_BASE			(scpsys_base)
@@ -68,6 +66,7 @@ static void __iomem *scpsys_base;	/* 0x10006000 */
 
 /* SPM Flag */
 #define SPM_FLAG_DIS_INFRA_PDN		BIT(1)
+#define SPM_FLAG_DIS_BUS_CLOCK_OFF	BIT(6)
 
 /* PWR_STATUS_2ND */
 #define PWR_STA_DISP			BIT(3)
@@ -1591,7 +1590,7 @@ EXPORT_SYMBOL(sloa_suspend_infra_power);
 int sloa_suspend_26m_mode(enum clk_26m mode)
 {
 	enum PMU_FLAGS_LIST vcore_index, vcore_sram_index;
-	static u32 vcore = UN_INIT, vcore_sram = UN_INIT;
+	static u32 vcore = UN_INIT, vcore_sram = UN_INIT, pcm_flags;
 	unsigned int pmic_id;
 
 	vcore_index = PMIC_RG_VCORE_SLEEP_VOLTAGE;
@@ -1603,19 +1602,21 @@ int sloa_suspend_26m_mode(enum clk_26m mode)
 	}
 
 	/* set Vcore sleep voltage by pmic id */
-	pmic_id = mt6357_upmu_get_swcid();
-	if (pmic_id == PMIC_MT6390_SWCID) {
+	pmic_id = pmic_get_register_value(PMIC_SWCID);
+	if (pmic_id == PMIC_MT6390_CHIP_ID)
 		pmic_set_register_value(vcore_index, 0x3);	/* 600mV */
-	} else if (pmic_id == PMIC_MT6357_SWCID) {
+	else
 		pmic_set_register_value(vcore_index, 0x2);	/* 625mV */
-	} else {
-		pr_err("unknown pmic id = 0x%x\n", pmic_id);
-		WARN_ON(1);
-	}
+
+	pr_debug("pmic id = 0x%x\n", pmic_id);
 
 	if (mode == FAKE_DCXO_26M) {
 		clk_buf_mode_set(CLK_BUF_BB_MD, 1);		/* SW mode */
 		pmic_set_register_value(vcore_sram_index, 0x6);	/* 800mV */
+		pcm_flags = SMC_CALL(GET_PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
+				     PW_PCM_FLAGS, 0);
+		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
+			 PW_PCM_FLAGS, pcm_flags | SPM_FLAG_DIS_BUS_CLOCK_OFF);
 		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
 			 PW_PCM_ADD_FAKE_26M_FLAG, 0);
 		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
@@ -1625,6 +1626,10 @@ int sloa_suspend_26m_mode(enum clk_26m mode)
 	} else if (mode == ULPLL_26M) {
 		clk_buf_mode_set(CLK_BUF_BB_MD, 0);		/* HW mode */
 		pmic_set_register_value(vcore_sram_index, 0x6);	/* 800mV */
+		pcm_flags = SMC_CALL(GET_PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
+				     PW_PCM_FLAGS, 0);
+		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
+			 PW_PCM_FLAGS, pcm_flags | SPM_FLAG_DIS_BUS_CLOCK_OFF);
 		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
 			 PW_PCM_REMOVE_FAKE_26M_FLAG, 0);
 		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
@@ -1636,6 +1641,11 @@ int sloa_suspend_26m_mode(enum clk_26m mode)
 		pmic_set_register_value(vcore_index, vcore);	/* 550mV */
 		pmic_set_register_value(vcore_sram_index,	/* 600mV */
 					vcore_sram);
+		pcm_flags = SMC_CALL(GET_PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
+				     PW_PCM_FLAGS, 0);
+		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
+			 PW_PCM_FLAGS, pcm_flags &
+			 ~SPM_FLAG_DIS_BUS_CLOCK_OFF);
 		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
 			 PW_PCM_REMOVE_FAKE_26M_FLAG, 0);
 		SMC_CALL(PWR_CTRL_ARGS, SPM_PWR_CTRL_SUSPEND,
@@ -1675,15 +1685,9 @@ static int sloa_syscore_suspend(void)
 	pr_notice("pwr = 0x%x, pwr_2nd = 0x%x, sw_rsv_10 = 0x%x\n",
 		  readl(PWR_STATUS), readl(PWR_STATUS_2ND),
 		  readl(SPM_SW_RSV_10));
-	pr_crit("[sloa] @@@@@@@@@@@@@@@@ Chip_pm_enter @@@@@@@@@@@@@@@@\n");
 
 	return 0;
 }
-bool sloa_is_conn2ap_wakeup(void)
-{
-	return is_conn2ap_wakeup;
-}
-EXPORT_SYMBOL(sloa_is_conn2ap_wakeup);
 
 static void spm_output_wake_reason(const struct wake_status *wakesta)
 {
@@ -1695,10 +1699,6 @@ static void spm_output_wake_reason(const struct wake_status *wakesta)
 			pr_notice("wake up by %s, assert %u, timeout = %u\n",
 				  wakeup_src_str[i], wakesta->assert_pc,
 				  wakesta->timer_out);
-			if (i == R12_CONN2AP_WAKEUP_B)
-				is_conn2ap_wakeup = true;
-			else
-				is_conn2ap_wakeup = false;
 			break;
 		} else if (wakesta->r12 == 0) {
 			pr_notice("r12 = 0?, assert %u, timeout = %u\n",
@@ -1757,7 +1757,6 @@ static void sloa_syscore_resume(void)
 	spm_get_wakeup_status(&spm_wakesta);
 	spm_clean_after_wakeup();
 	spm_output_wake_reason(&spm_wakesta);
-	pr_crit("[sloa] @@@@@@@@@@@@@@@@ Chip_pm_end @@@@@@@@@@@@@@@@\n");
 }
 
 static struct syscore_ops sloa_syscore_ops = {

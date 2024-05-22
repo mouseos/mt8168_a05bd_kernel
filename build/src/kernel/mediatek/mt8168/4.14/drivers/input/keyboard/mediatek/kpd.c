@@ -25,14 +25,9 @@
 #include <linux/of_irq.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
-#include "upmu_common.h"
-
-#define MTK_KP_WAKESOURCE
 
 #define KPD_NAME	"mtk-kpd"
-#ifndef CONFIG_KPD_VOLUME_KEY_SWAP
-#define MTK_KP_WAKESOURCE	/* this is for auto set wake up source */
-#endif
+
 #ifdef CONFIG_LONG_PRESS_MODE_EN
 struct timer_list Long_press_key_timer;
 atomic_t vol_down_long_press_flag = ATOMIC_INIT(0);
@@ -50,11 +45,6 @@ static unsigned int kp_irqnr;
 static u32 kpd_keymap[KPD_NUM_KEYS];
 static u16 kpd_keymap_state[KPD_NUM_MEMS];
 
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-static bool kpd_swap_vol_key;
-static u32 kpd_swap_up_code, kpd_swap_down_code;
-static bool kpd_volume_key_hardware_inversed;
-#endif
 struct input_dev *kpd_input_dev;
 #ifdef CONFIG_PM_WAKELOCKS
 struct wakeup_source kpd_suspend_lock;
@@ -72,48 +62,6 @@ static int kpd_pdrv_probe(struct platform_device *pdev);
 static int kpd_pdrv_suspend(struct platform_device *pdev, pm_message_t state);
 static int kpd_pdrv_resume(struct platform_device *pdev);
 static struct platform_driver kpd_pdrv;
-
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-bool get_kpd_swap_vol_key(void)
-{
-	return kpd_swap_vol_key;
-}
-EXPORT_SYMBOL(get_kpd_swap_vol_key);
-
-void set_kpd_swap_vol_key(bool flag)
-{
-	kpd_swap_vol_key = flag;
-}
-EXPORT_SYMBOL(set_kpd_swap_vol_key);
-
-u32 kpd_get_linux_key_code(u32 keycode, bool pressed)
-{
-	u32 linux_keycode = keycode;
-	u32 kc = keycode;
-
-	if (pressed) {
-		if (kpd_swap_vol_key ^ kpd_volume_key_hardware_inversed) {
-			if (linux_keycode == KEY_VOLUMEDOWN)
-				linux_keycode = KEY_VOLUMEUP;
-			else if (linux_keycode == KEY_VOLUMEUP)
-				linux_keycode = KEY_VOLUMEDOWN;
-		}
-		/* Save the pressed volume keycode */
-		if (kc == KEY_VOLUMEUP)
-			kpd_swap_up_code = linux_keycode;
-		else if (kc == KEY_VOLUMEDOWN)
-			kpd_swap_down_code = linux_keycode;
-	} else {
-		/* Unpressed keycode should match the pressed keycode */
-		if (linux_keycode == KEY_VOLUMEUP && kpd_swap_up_code != 0)
-			linux_keycode = kpd_swap_up_code;
-		else if (linux_keycode == KEY_VOLUMEDOWN
-				&& kpd_swap_down_code != 0)
-			linux_keycode = kpd_swap_down_code;
-	}
-	return linux_keycode;
-}
-#endif
 
 static void kpd_memory_setting(void)
 {
@@ -216,6 +164,12 @@ void kpd_pwrkey_pmic_handler(unsigned long pressed)
 		return;
 	}
 	kpd_pmic_pwrkey_hal(pressed);
+#if (defined(CONFIG_ARCH_MT8173) || defined(CONFIG_ARCH_MT8163))
+	if (pressed) /* keep the lock while the button in held pushed */
+		wake_lock(&pwrkey_lock);
+	else /* keep the lock for extra 500ms after the button is released */
+		wake_lock_timeout(&pwrkey_lock, HZ/2);
+#endif
 }
 #endif
 
@@ -227,6 +181,11 @@ void kpd_pmic_rstkey_handler(unsigned long pressed)
 		return;
 	}
 	kpd_pmic_rstkey_hal(pressed);
+#ifdef CONFIG_PM_WAKELOCKS
+	__pm_wakeup_event(&kpd_suspend_lock, 500);
+#else
+	wake_lock_timeout(&kpd_suspend_lock, HZ / 2);
+#endif
 }
 
 static void kpd_keymap_handler(unsigned long data)
@@ -267,10 +226,6 @@ static void kpd_keymap_handler(unsigned long data)
 			linux_keycode = kpd_keymap[hw_keycode];
 			if (linux_keycode == 0U)
 				continue;
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-			linux_keycode = kpd_get_linux_key_code(linux_keycode,
-								pressed);
-#endif
 			input_report_key(kpd_input_dev, linux_keycode, pressed);
 			input_sync(kpd_input_dev);
 			kpd_print("report Linux keycode = %d\n", linux_keycode);
@@ -350,12 +305,7 @@ void kpd_get_dts_info(struct device_node *node)
 		memset(kpd_dts_data.kpd_hw_init_map, 0,
 			sizeof(kpd_dts_data.kpd_hw_init_map));
 	}
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-	kpd_volume_key_hardware_inversed = of_property_read_bool(node,
-					"mediatek,kpd-hw-volume-key-inversed");
-	kpd_print("kpd_volume_key_hardware_inversed = %s\n",
-		kpd_volume_key_hardware_inversed ? "true" : "false");
-#endif
+
 	kpd_print("deb= %d, sw-pwr= %d, hw-pwr= %d, hw-rst= %d, sw-rst= %d\n",
 		  kpd_dts_data.kpd_key_debounce, kpd_dts_data.kpd_sw_pwrkey,
 			kpd_dts_data.kpd_hw_pwrkey, kpd_dts_data.kpd_hw_rstkey,
@@ -534,8 +484,6 @@ static int kpd_pdrv_suspend(struct platform_device *pdev, pm_message_t state)
 		kpd_wakeup_src_setting(0);
 		kpd_print("kpd_early_suspend wake up source disable!! (%d)\n",
 				kpd_suspend);
-		pmic_enable_interrupt(INT_HOMEKEY, 0, "PMIC");
-		pmic_enable_interrupt(INT_HOMEKEY_R, 0, "PMIC");
 	}
 #endif
 	kpd_print("suspend!! (%d)\n", kpd_suspend);
@@ -553,8 +501,6 @@ static int kpd_pdrv_resume(struct platform_device *pdev)
 		kpd_print("kpd_early_suspend wake up source resume!! (%d)\n",
 				kpd_suspend);
 		kpd_wakeup_src_setting(1);
-		pmic_enable_interrupt(INT_HOMEKEY, 1, "PMIC");
-		pmic_enable_interrupt(INT_HOMEKEY_R, 1, "PMIC");
 	}
 #endif
 	kpd_print("resume!! (%d)\n", kpd_suspend);

@@ -108,11 +108,8 @@ int mtk_scpsys_ext_set_bus_protection(const struct bus_prot *bp_table,
 			return -EINVAL;
 		}
 
-		if (ret) {
-			pr_err("scpsys set_bus_protection failed %d\n",
-			       bp_table[i].type);
+		if (ret)
 			return ret;
-		}
 	}
 
 	return 0;

@@ -259,7 +259,7 @@ long long est_next_submit(struct codec_history *hist)
 	if (hist->submit_interval == 0) {
 		next_submit = div_64(
 			(hist->submit[prev_idx] - hist->submit[first_idx]) * 2,
-		       (hist->cur_cnt - 1));
+			(hist->cur_cnt - 1));
 	} else {
 		next_submit = hist->submit_interval * 2;
 	}

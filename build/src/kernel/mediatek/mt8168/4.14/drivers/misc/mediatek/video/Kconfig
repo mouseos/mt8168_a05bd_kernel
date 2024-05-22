@@ -159,10 +159,10 @@ config MTK_DRE30_SUPPORT
 	  This feature requires the cowork of AAL user-space algorithm process.
 	  Please also turn on MTK_AAL_SUPPORT amd MTK_DRE30_SUPPORT in ProjectConfig.mk.
 
-config MTK_ONLY_SINGLE_DISPLAY
-    bool "support single display"
-    default n
-    help
-      This config decide if both OVL0 and OVL0_2L used for primary display.
-      OVL0_2L can be used for external path if it set to y.
-      If you are not sure abort this, do not set it to y.
+config FREE_FB_BUFFER
+	bool "Support free framebuffer when into kernel"
+	default n
+	help
+	  This config decide if free framebuffer when into kernel
+	  DAL layer will not be supported if it set to y
+	  If you are not sure about this, do not set it to y

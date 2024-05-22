@@ -127,6 +127,14 @@ static const struct file_operations cmdqDebugInstructionCountOp = {
 };
 #endif
 
+static u64 job_mapping_idx = 1;
+static struct list_head job_mapping_list;
+struct cmdq_job_mapping_struct {
+	u64 id;
+	struct cmdqRecStruct *job;
+	struct list_head list_entry;
+};
+static DEFINE_MUTEX(cmdq_job_mapping_list_mutex);
 
 void cmdq_driver_dump_readback(u32 *addrs, u32 count, u32 *values)
 {}
@@ -337,6 +345,7 @@ do { \
 static long cmdq_driver_destroy_secure_medadata(
 	struct cmdqCommandStruct *pCommand)
 {
+#ifdef CMDQ_SECURE_PATH_SUPPORT
 	u32 i;
 
 	kfree(CMDQ_U32_PTR(pCommand->secData.addrMetadatas));
@@ -344,7 +353,7 @@ static long cmdq_driver_destroy_secure_medadata(
 
 	for (i = 0; i < ARRAY_SIZE(pCommand->secData.ispMeta.ispBufs); i++)
 		CMDQ_PTR_FREE_NULL(pCommand->secData.ispMeta.ispBufs[i].va);
-
+#endif
 	return 0;
 }
 
@@ -452,10 +461,7 @@ static long cmdq_driver_create_secure_medadata(
 		pCommand->secData.addrMetadatas =
 			(cmdqU32Ptr_t)(unsigned long)meta_buf;
 		/* free secure path metadata */
-		if (pCommand->secData.addrMetadatas) {
-			kfree(CMDQ_U32_PTR(pCommand->secData.addrMetadatas));
-			pCommand->secData.addrMetadatas = 0;
-		}
+		cmdq_driver_destroy_secure_medadata(pCommand);
 		return ret;
 	}
 	/* replace buffer with kernel buffer */
@@ -505,11 +511,6 @@ static long cmdq_driver_process_command_request(
 	u32 *userRegValue = NULL;
 	u32 userRegCount = 0;
 
-	if (pCommand->regRequest.count > CMDQ_MAX_DUMP_REG_COUNT) {
-		CMDQ_ERR("invalid regRequest.count:%d\n", pCommand->regRequest.count);
-		return -EINVAL;
-	}
-
 	if (pCommand->regRequest.count != pCommand->regValue.count) {
 		CMDQ_ERR("mismatch regRequest and regValue\n");
 		return -EFAULT;
@@ -541,7 +542,6 @@ static long cmdq_driver_process_command_request(
 	    kzalloc(pCommand->regRequest.count * sizeof(u32), GFP_KERNEL);
 	pCommand->regValue.count = pCommand->regRequest.count;
 	if (CMDQ_U32_PTR(pCommand->regValue.regValues) == NULL) {
-		cmdq_driver_destroy_secure_medadata(pCommand);
 		kfree(CMDQ_U32_PTR(pCommand->regRequest.regAddresses));
 		return -ENOMEM;
 	}
@@ -623,6 +623,9 @@ static s32 cmdq_driver_copy_handle_prop_from_user(void *from, u32 size,
 		}
 
 		*to = task_prop;
+	} else if (to) {
+		CMDQ_LOG("Initialize prop_addr to NULL...\n");
+		*to = NULL;
 	}
 
 	return 0;
@@ -630,8 +633,10 @@ static s32 cmdq_driver_copy_handle_prop_from_user(void *from, u32 size,
 
 static void cmdq_release_handle_property(void **prop_addr, u32 *prop_size)
 {
-	if (!prop_addr || !prop_size)
+	if (!prop_addr || !prop_size || !*prop_size) {
+		CMDQ_LOG("Return w/o need of kfree(prop_addr)\n");
 		return;
+	}
 
 	kfree(*prop_addr);
 	*prop_addr = NULL;
@@ -706,6 +711,7 @@ s32 cmdq_driver_ioctl_async_job_exec(struct file *pf,
 	struct cmdqRecStruct *handle = NULL;
 	u32 userRegCount;
 	s32 status;
+	struct cmdq_job_mapping_struct *mapping_job = NULL;
 
 	if (copy_from_user(&job, (void *)param, sizeof(job))) {
 		CMDQ_ERR("copy job from user fail\n");
@@ -791,7 +797,23 @@ s32 cmdq_driver_ioctl_async_job_exec(struct file *pf,
 	/* free secure path metadata */
 	cmdq_driver_destroy_secure_medadata(&job.command);
 
-	job.hJob = (unsigned long)handle;
+	/* privateData can reset since it has passed to handle */
+	job.command.privateData = 0;
+
+	mapping_job = kzalloc(sizeof(*mapping_job), GFP_KERNEL);
+	if (!mapping_job)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&mapping_job->list_entry);
+	mutex_lock(&cmdq_job_mapping_list_mutex);
+	if (job_mapping_idx == 0)
+		job_mapping_idx = 1;
+	mapping_job->id = job_mapping_idx;
+	job.hJob = job_mapping_idx;
+	job_mapping_idx++;
+	mapping_job->job = handle;
+	list_add_tail(&mapping_job->list_entry, &job_mapping_list);
+	mutex_unlock(&cmdq_job_mapping_list_mutex);
 	if (copy_to_user((void *)param, (void *)&job, sizeof(job))) {
 		CMDQ_ERR("CMDQ_IOCTL_ASYNC_JOB_EXEC copy_to_user failed\n");
 		return -EFAULT;
@@ -808,14 +830,28 @@ s32 cmdq_driver_ioctl_async_job_wait_and_close(unsigned long param)
 	/* backup value after task release */
 	s32 status;
 	u64 exec_cost = sched_clock();
+	struct cmdq_job_mapping_struct *mapping_job = NULL, *tmp = NULL;
 
 	if (copy_from_user(&jobResult, (void *)param, sizeof(jobResult))) {
 		CMDQ_ERR("copy_from_user jobResult fail\n");
 		return -EFAULT;
 	}
 
+	handle = NULL;
 	/* verify job handle */
-	handle = cmdq_mdp_get_valid_handle((unsigned long)jobResult.hJob);
+	mutex_lock(&cmdq_job_mapping_list_mutex);
+	list_for_each_entry_safe(mapping_job, tmp, &job_mapping_list,
+		list_entry) {
+		if (mapping_job->id == jobResult.hJob) {
+			handle = mapping_job->job;
+			CMDQ_MSG("find handle:%p with id:%llx\n",
+				handle, jobResult.hJob);
+			list_del(&mapping_job->list_entry);
+			kfree(mapping_job);
+			break;
+		}
+	}
+	mutex_unlock(&cmdq_job_mapping_list_mutex);
 	if (!handle) {
 		CMDQ_ERR("job does not exists:0x%016llx\n", jobResult.hJob);
 		return -EFAULT;
@@ -872,7 +908,6 @@ s32 cmdq_driver_ioctl_async_job_wait_and_close(unsigned long param)
 		CMDQ_ERR("wait task result failed:%d handle:0x%p\n",
 			status, handle);
 		cmdq_task_destroy(handle);
-		kfree(CMDQ_U32_PTR(jobResult.regValue.regValues));
 		return status;
 	}
 
@@ -896,8 +931,6 @@ s32 cmdq_driver_ioctl_async_job_wait_and_close(unsigned long param)
 	if (copy_to_user((void *)userRegValue, (void *)(unsigned long)
 		handle->reg_values, handle->user_reg_count * sizeof(u32))) {
 		CMDQ_ERR("Copy REGVALUE to user space failed\n");
-		cmdq_task_destroy(handle);
-		kfree(CMDQ_U32_PTR(jobResult.regValue.regValues));
 		return -EFAULT;
 	}
 
@@ -919,23 +952,15 @@ s32 cmdq_driver_ioctl_async_job_wait_and_close(unsigned long param)
 	return 0;
 }
 
-s32 cmdq_driver_ioctl_alloc_write_address(unsigned long param)
+s32 cmdq_driver_ioctl_alloc_write_address(void *fp, unsigned long param)
 {
 	struct cmdqWriteAddressStruct addrReq;
 	dma_addr_t paStart = 0;
 	s32 status;
 
 	if (copy_from_user(&addrReq, (void *)param, sizeof(addrReq))) {
-		CMDQ_ERR("ALLOC_WRITE_ADDRESS failed\n");
+		CMDQ_ERR("%s copy_from_user failed\n", __func__);
 		return -EFAULT;
-	}
-
-	if (!addrReq.count
-	    || addrReq.count > CMDQ_MAX_WRITE_ADDR_COUNT) {
-		CMDQ_ERR(
-			"Invalid alloc write addr count:%u\n",
-			addrReq.count);
-		return -EINVAL;
 	}
 
 	status = cmdqCoreAllocWriteAddress(addrReq.count, &paStart);
@@ -1044,6 +1069,27 @@ static long cmdq_ioctl(struct file *pf, unsigned int code,
 	case CMDQ_IOCTL_QUERY_USAGE:
 		status = cmdq_driver_ioctl_query_usage(pf, param);
 		break;
+#if 0
+	case CMDQ_IOCTL_ASYNC_JOB_EXEC:
+		CMDQ_SYSTRACE_BEGIN("%s_async_job_exec\n", __func__);
+		status = cmdq_driver_ioctl_async_job_exec(pf, param);
+		CMDQ_SYSTRACE_END();
+		break;
+	case CMDQ_IOCTL_ASYNC_JOB_WAIT_AND_CLOSE:
+		CMDQ_SYSTRACE_BEGIN("%s_async_job_wait_and_close\n", __func__);
+		status = cmdq_driver_ioctl_async_job_wait_and_close(param);
+		CMDQ_SYSTRACE_END();
+		break;
+	case CMDQ_IOCTL_ALLOC_WRITE_ADDRESS:
+		status = cmdq_driver_ioctl_alloc_write_address(pf, param);
+		break;
+	case CMDQ_IOCTL_FREE_WRITE_ADDRESS:
+		status = cmdq_driver_ioctl_free_write_address(param);
+		break;
+	case CMDQ_IOCTL_READ_ADDRESS_VALUE:
+		status = cmdq_driver_ioctl_read_address_value(param);
+		break;
+#endif
 	case CMDQ_IOCTL_QUERY_CAP_BITS:
 		status = cmdq_driver_ioctl_query_cap_bits(param);
 		break;
@@ -1090,6 +1136,12 @@ static long cmdq_ioctl_compat(struct file *pFile, unsigned int code,
 {
 	switch (code) {
 	case CMDQ_IOCTL_QUERY_USAGE:
+	case CMDQ_IOCTL_EXEC_COMMAND:
+	case CMDQ_IOCTL_ASYNC_JOB_EXEC:
+	case CMDQ_IOCTL_ASYNC_JOB_WAIT_AND_CLOSE:
+	case CMDQ_IOCTL_ALLOC_WRITE_ADDRESS:
+	case CMDQ_IOCTL_FREE_WRITE_ADDRESS:
+	case CMDQ_IOCTL_READ_ADDRESS_VALUE:
 	case CMDQ_IOCTL_QUERY_CAP_BITS:
 	case CMDQ_IOCTL_QUERY_DTS:
 	case CMDQ_IOCTL_NOTIFY_ENGINE:
@@ -1275,6 +1327,7 @@ static int cmdq_probe(struct platform_device *pDevice)
 		CMDQ_ERR("%s attr inst count create fail\n", __func__);
 #endif
 
+	INIT_LIST_HEAD(&job_mapping_list);
 	mdp_limit_dev_create(pDevice);
 	CMDQ_LOG("CMDQ driver probe end\n");
 
@@ -1284,7 +1337,6 @@ static int cmdq_probe(struct platform_device *pDevice)
 
 static int cmdq_remove(struct platform_device *pDevice)
 {
-	cmdq_mdp_deinit_pmqos();
 
 	/* unregister mdp power domain control. */
 	pm_runtime_disable(&pDevice->dev);
@@ -1339,7 +1391,6 @@ static struct platform_driver gCmdqDriver = {
 		.of_match_table = cmdq_of_ids,
 	}
 };
-
 static int __init mdp_late_init(void)
 {
 	int status;

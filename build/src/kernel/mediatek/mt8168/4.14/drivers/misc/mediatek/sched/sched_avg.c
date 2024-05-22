@@ -139,7 +139,6 @@ int show_btask(char *buf, int buf_size)
 	int len = 0;
 	struct task_struct *p;
 
-	rcu_read_lock();
 	for (i = 0; i < MAX_CLUSTER_NR; i++) {
 		btask_list = btask_list_h[i];
 
@@ -169,7 +168,6 @@ int show_btask(char *buf, int buf_size)
 			(btask_list[j] && p) ? p->se.avg.util_avg : 0UL);
 		}
 	}
-	rcu_read_unlock();
 
 	return len;
 }

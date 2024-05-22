@@ -37,7 +37,14 @@
 #define TOUCH_FSTB_ACTIVE_US 100000
 
 /*touch boost parent*/
+#if defined(CONFIG_INPUT_TOUCHSCREEN)
 int init_tchbst(struct proc_dir_entry *parent);
+#else
+int init_tchbst(struct proc_dir_entry *parent)
+{
+	return 0;
+}
+#endif
 
 /*user*/
 void switch_usrtch(int enable);

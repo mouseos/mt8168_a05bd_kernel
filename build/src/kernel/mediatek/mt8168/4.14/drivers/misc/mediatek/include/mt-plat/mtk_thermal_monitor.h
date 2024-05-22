@@ -106,11 +106,6 @@ enum mtk_thermal_sensor_id {
 	MTK_THERMAL_SENSOR_MD_PA,
 	MTK_THERMAL_SENSOR_DCTM,
 	MTK_THERMAL_SENSOR_CHARGER,
-#ifdef CONFIG_COOLER_ADAPTIVE_BTS
-	MTK_THERMAL_SENSOR_BTS0,
-	MTK_THERMAL_SENSOR_BTS1,
-	MTK_THERMAL_SENSOR_BTS2,
-#endif
 
 	MTK_THERMAL_SENSOR_COUNT
 };
@@ -120,8 +115,6 @@ extern struct proc_dir_entry *mtk_thermal_get_proc_drv_therm_dir_entry(void);
 
 /* This API function is implemented in mediatek/kernel/drivers/leds/leds.c */
 extern int setMaxbrightness(int max_level, int enable);
-/* This API function is implemented in drivers/misc/mediatek/pmic/mt6370/inc/mt6370_pmu_bled.c */
-extern int led_setMaxbrightness(int max_level, int enable);
 
 extern void machine_power_off(void);
 #endif

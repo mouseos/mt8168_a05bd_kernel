@@ -353,7 +353,7 @@ void print_enabled_clks(void)
 	}
 }
 
-static int check_pll_off(void)
+static void check_pll_off(void)
 {
 	static const char * const off_pll_names[] = {
 		"univpll",
@@ -391,15 +391,13 @@ static int check_pll_off(void)
 		invalid++;
 	}
 	if (invalid) {
-		clk_warn("suspend warning: unexpected unclosed PLL: %d: %s\n",
-			invalid, buf);
+		clk_warn("suspend warning: unexpected unclosed PLL: %s\n", buf);
 		print_enabled_clks();
-		return -EBUSY;
 #if WARN_ON_CHECK_FAIL
 		WARN_ON(1);
 #endif
 	}
-	return 0;
+
 }
 
 void print_enabled_clks_once(void)
@@ -414,7 +412,8 @@ void print_enabled_clks_once(void)
 
 static int clkchk_syscore_suspend(void)
 {
-	return check_pll_off();
+	check_pll_off();
+	return 0;
 }
 
 static void clkchk_syscore_resume(void)

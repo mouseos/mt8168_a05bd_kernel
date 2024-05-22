@@ -21,8 +21,7 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/$(CMDQ_VER) \
 	     -I$(srctree)/drivers/staging/android/ion \
 	     -I$(srctree)/drivers/staging/android/ion/mtk
 
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/$(CMDQ_VER)/$(MTK_PLATFORM) \
-          -I$(srctree)/drivers/misc/mediatek/cmdq/$(CMDQ_VER)
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/$(CMDQ_VER)/$(MTK_PLATFORM)
 
 ifeq ($(or $(strip $(CONFIG_TRUSTONIC_TEE_SUPPORT)), $(strip $(CONFIG_MICROTRUST_TEE_SUPPORT))),y)
 ifeq ($(or $(strip $(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT)), $(strip $(CONFIG_MTK_CAM_SECURITY_SUPPORT))),y)

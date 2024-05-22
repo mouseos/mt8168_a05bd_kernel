@@ -612,10 +612,5 @@ config CHARGER_RT9455
 
 source "drivers/power/supply/mediatek/battery/Kconfig"
 source "drivers/power/supply/mediatek/charger/Kconfig"
-source "drivers/power/supply/mediatek/wpc/Kconfig"
-source "drivers/power/supply/mediatek/fusb/Kconfig"
-source "drivers/power/supply/mediatek/amzn_ld/Kconfig"
-source "drivers/power/supply/mediatek/pubadc_manage/Kconfig"
-source "drivers/power/supply/mediatek/max20342/Kconfig"
 
 endif # POWER_SUPPLY

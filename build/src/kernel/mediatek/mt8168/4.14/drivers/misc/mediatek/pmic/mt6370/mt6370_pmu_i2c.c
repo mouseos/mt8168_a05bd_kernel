@@ -17,7 +17,6 @@
 #include <linux/i2c.h>
 #include <linux/pm.h>
 #include <linux/of_gpio.h>
-#include <linux/of_irq.h>
 #include <linux/pm_runtime.h>
 
 #include "inc/mt6370_pmu.h"
@@ -179,21 +178,29 @@ static int mt_parse_dt(struct device *dev,
 		       struct mt6370_pmu_platform_data *pdata)
 {
 	struct device_node *np = dev->of_node;
+	int ret = 0;
 
-	pdata->intr_gpio = irq_of_parse_and_map(np, 0);
-	if (!pdata->intr_gpio) {
-		pr_err("%s: parse irq fail\n", __func__);
-		return -EINVAL;
-	}
-	pr_info("%s: irq = %d\n", __func__, pdata->intr_gpio);
+#if (!defined(CONFIG_MTK_GPIO) || defined(CONFIG_MTK_GPIOLIB_STAND))
+	ret = of_get_named_gpio(np, "mt6370,intr_gpio", 0);
+	if (ret < 0)
+		goto out_parse_dt;
+	pdata->intr_gpio = ret;
+#else
+	ret =  of_property_read_u32(np, "mt6370,intr_gpio_num",
+					&pdata->intr_gpio);
+	if (ret < 0)
+		goto out_parse_dt;
+#endif
 	return 0;
+out_parse_dt:
+	return ret;
 }
 
 static inline void rt_config_of_node(struct device *dev)
 {
-	struct device_node *np = dev->of_node;
+	struct device_node *np = NULL;
 
-	np = of_find_node_by_name(np, "mt6370_pmu_dts");
+	np = of_find_node_by_name(NULL, "mt6370_pmu_dts");
 	if (np) {
 		dev_err(dev, "find mt6370_pmu_dts node\n");
 		dev->of_node = np;
@@ -208,8 +215,6 @@ static inline int mt6370_pmu_chip_id_check(struct i2c_client *i2c)
 	if (ret < 0)
 		return ret;
 
-	pr_info("%s: vendor_id = 0x%02x, chip_rev = 0x%02x\n",
-		__func__, ret & 0xf0, ret & 0x0f);
 	if ((ret & 0xF0) == 0x80 || (ret & 0xF0) == 0xE0 ||
 		(ret & 0xF0) == 0xF0)
 		return (ret & 0xff);
@@ -246,7 +251,6 @@ static int mt6370_pmu_probe(struct i2c_client *i2c,
 	uint8_t chip_id = 0;
 	int ret = 0;
 
-	pr_info("%s: ++\n", __func__);
 	ret = mt6370_pmu_chip_id_check(i2c);
 	if (ret < 0)
 		return ret;
@@ -279,18 +283,14 @@ static int mt6370_pmu_probe(struct i2c_client *i2c,
 
 	pm_runtime_set_active(&i2c->dev);
 	ret = mt6370_pmu_regmap_register(chip, &mt6370_regmap_fops);
-	if (ret < 0) {
-		dev_err(chip->dev, "%s: fail(%d)\n", __func__, ret);
+	if (ret < 0)
 		goto out_regmap;
-	}
 	ret = mt6370_pmu_irq_register(chip);
 	if (ret < 0)
 		goto out_irq;
 	ret = mt6370_pmu_subdevs_register(chip);
-	if (ret < 0) {
-		dev_err(chip->dev, "%s: subdevs register fail\n", __func__);
+	if (ret < 0)
 		goto out_subdevs;
-	}
 	pm_runtime_enable(&i2c->dev);
 	dev_info(&i2c->dev, "%s successfully\n", __func__);
 	return 0;

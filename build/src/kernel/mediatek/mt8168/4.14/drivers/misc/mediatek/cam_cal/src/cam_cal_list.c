@@ -11,10 +11,6 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 #include <linux/kernel.h>
-#include <linux/of.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
-
 #include "cam_cal_list.h"
 #include "kd_imgsensor.h"
 
@@ -42,6 +38,7 @@
 #define CAM_CALERR(x, ...)
 #endif
 
+
 #define MTK_MAX_CID_NUM 4
 unsigned int mtkCidList[MTK_MAX_CID_NUM] = {
 	0x010b00ff,/*Single MTK Format*/
@@ -49,18 +46,6 @@ unsigned int mtkCidList[MTK_MAX_CID_NUM] = {
 	0x030b00ff,/*Double MTK Format in One OTP/EEPRom*/
 	0x040b00ff /*Double MTK Format in One OTP/EEPRom V1.4*/
 };
-
-#define IDME_OF_FRONT_CAM_OTP "/idme/front_cam_otp"
-#define IDME_OF_REAR_CAM_OTP "/idme/rear_cam_otp"
-
-/* otp data is 2048 bytes at most,
-  but needs to save as string, so need 2048*2=4096bytes */
-#define CAM_OTP_DATA_LEN 2048
-
-/* mtk otp data length */
-#define CAM_MTK_OTP_LEN 1895
-unsigned char front_cam_otp[CAM_OTP_DATA_LEN];
-unsigned char rear_cam_otp[CAM_OTP_DATA_LEN];
 
 struct stCAM_CAL_FUNC_STRUCT g_camCalCMDFunc[] = {
 	{CMD_BRCB032GWZ, brcb032gwz_selective_read_region},
@@ -71,47 +56,41 @@ struct stCAM_CAL_FUNC_STRUCT g_camCalCMDFunc[] = {
 	{0, 0} /*end of list*/
 };
 
-
 struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 /*Below is commom sensor */
-	{GC2375HMIPI_CXT_FRONT_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid, cam_cal_front_read_region},
-	{GC2375HMIPI_CXT_REAR_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, cam_cal_rear_read_region},
-	{GC02M1MIPI_CXT_REAR_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, cam_cal_rear_read_region},
-	{GC02M1MIPI_CXT_FRONT_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, cam_cal_front_read_region},
-
-	{IMX338_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{S5K4E6_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX386_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{S5K3M3_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{S5K2L7_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX398_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_double_eeprom, 0},
-	{IMX318_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{OV8858_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX350_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{S5K3P8SX_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_double_eeprom, 0},
-	{IMX386_MONO_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX576_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_double_eeprom, 0},
+	{IMX338_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{S5K4E6_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX386_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{S5K3M3_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{S5K2L7_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX398_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_double_eeprom},
+	{IMX318_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{OV8858_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX350_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{S5K3P8SX_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_double_eeprom},
+	{IMX386_MONO_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX576_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_double_eeprom},
 /*99 */
-	{IMX258_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX258_MONO_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
+	{IMX258_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX258_MONO_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
 /*97*/
-	{OV23850_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{OV23850_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{S5K3M2_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
+	{OV23850_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{OV23850_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid},
+	{S5K3M2_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
 /*39*/
-	{OV13870_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{OV8856_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
+	{OV13870_SENSOR_ID, 0xA8, CMD_AUTO, cam_cal_check_mtk_cid},
+	{OV8856_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
 /*55*/
-	{S5K2P8_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{S5K2P8_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{OV8858_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_mtk_cid, 0},
+	{S5K2P8_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_mtk_cid},
+	{S5K2P8_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{OV8858_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_mtk_cid},
 /* Others */
-	{S5K2X8_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX376_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX214_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
-	{IMX214_MONO_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid, 0},
+	{S5K2X8_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX376_SENSOR_ID, 0xA2, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX214_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
+	{IMX214_MONO_SENSOR_ID, 0xA0, CMD_AUTO, cam_cal_check_mtk_cid},
 	/*  ADD before this line */
-	{0, 0, CMD_NONE, 0, 0} /*end of list*/
+	{0, 0, CMD_NONE, 0} /*end of list*/
 };
 
 
@@ -134,150 +113,6 @@ unsigned int cam_cal_get_func_list(
 		return 1;
 
 	*ppCamcalFuncList = &g_camCalCMDFunc[0];
-	return 0;
-}
-
-static int idme_cam_otp_checksum(unsigned char *data)
-{
-	int i;
-	unsigned int cal_sum = 0;
-	unsigned char *p = (char *)&cal_sum;
-
-	if (data == NULL) {
-		CAM_CALDB("%s data is null\n", __func__);
-		return -1;
-	}
-
-	/* calculating sum, adding all otp data by byte */
-	for (i = 0; i < CAM_MTK_OTP_LEN - 4; i++)
-		cal_sum += data[i];
-
-	/* checksum */
-	for (i = 0; i < 4; i++) {
-		if (p[i] != data[CAM_MTK_OTP_LEN - 1 - i]) {
-			CAM_CALDB("%s camera otp checksum failed\n", __func__);
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
-static int idme_get_front_cam_otp(unsigned char *data)
-{
-	struct device_node *ap = NULL;
-	const unsigned char *idme_data = NULL;
-	char buf[3] = {0};
-	int len = 0, i;
-	int ret = 0;
-
-	if (data == NULL) {
-		CAM_CALDB("%s data is null\n",__func__);
-		return -1;
-	}
-
-	ap = of_find_node_by_path(IDME_OF_FRONT_CAM_OTP);
-	if (ap) {
-		idme_data = (const unsigned char *)of_get_property(ap, "value", &len);
-		if (likely(len > 0 && len <= CAM_OTP_DATA_LEN*2)) {
-			for (i = 0; i < (CAM_MTK_OTP_LEN*2 - 1); i += 2) {
-				buf[0] = idme_data[i];
-				buf[1] = idme_data[i + 1];
-				ret = kstrtou8(buf, 16, data+(i/2));
-				if (ret)
-					CAM_CALDB("%s kstrtou8 failed, i=%d\n", __func__, i);
-			}
-		} else {
-			CAM_CALDB("%s front cam otp len err=%d\n", __func__, len);
-			return -1;
-		}
-	} else {
-		CAM_CALDB("%s of_find_node_by_path failed\n",__func__);
-		return -1;
-	}
-
-	return ret;
-}
-
-static int idme_get_rear_cam_otp(unsigned char *data)
-{
-	struct device_node *ap = NULL;
-	const unsigned char *idme_data = NULL;
-	char buf[3] = {0};
-	int len = 0, i;
-	int ret = 0;
-
-	if (data == NULL) {
-		CAM_CALDB("%s data is null\n",__func__);
-		return -1;
-	}
-
-	ap = of_find_node_by_path(IDME_OF_REAR_CAM_OTP);
-	if (ap) {
-		idme_data = (const unsigned char *)of_get_property(ap, "value", &len);
-		if (likely(len > 0 && len <= CAM_OTP_DATA_LEN*2)) {
-			for (i = 0; i < (CAM_MTK_OTP_LEN*2 - 1); i += 2) {
-				buf[0] = idme_data[i];
-				buf[1] = idme_data[i + 1];
-				ret = kstrtou8(buf, 16, data+(i/2));
-				if (ret)
-					CAM_CALDB("%s kstrtou8 failed, i=%d\n", __func__, i);
-			}
-		} else {
-			CAM_CALDB("%s rear cam otp len err=%d\n", __func__, len);
-			return -1;
-		}
-	} else {
-		CAM_CALDB("%s of_find_node_by_path failed\n",__func__);
-		return -1;
-	}
-
-	return ret;
-}
-
-unsigned int cam_cal_front_read_region(
-	struct i2c_client *client, unsigned int addr,
-	unsigned char *data, unsigned int size)
-{
-	int err = 0;
-
-	if (data == NULL)
-		return 0;
-
-	if ((addr > CAM_MTK_OTP_LEN) || (size > CAM_MTK_OTP_LEN) || (addr + size) > CAM_MTK_OTP_LEN) {
-		CAM_CALDB("[%s] Error, out of boundary while reading otp, addr:%u, size:%u\n", __func__, addr, size);
-		return 0;
-	}
-
-	err = idme_get_front_cam_otp(front_cam_otp);
-	if (err == 0 && idme_cam_otp_checksum(front_cam_otp) == 0) {
-		memcpy(data, front_cam_otp+addr, size);
-		return size;
-	}
-
-	return 0;
-}
-
-unsigned int cam_cal_rear_read_region(
-	struct i2c_client *client, unsigned int addr,
-	unsigned char *data, unsigned int size)
-{
-	int err = 0;
-
-	if (data == NULL)
-		return 0;
-
-	if ((addr > CAM_MTK_OTP_LEN) || (size > CAM_MTK_OTP_LEN) || (addr + size) > CAM_MTK_OTP_LEN) {
-		CAM_CALDB("[%s] Error, out of boundary while reading otp, addr:%u, size:%u\n", __func__, addr, size);
-		return 0;
-	}
-
-	err = idme_get_rear_cam_otp(rear_cam_otp);
-	if (err == 0 && idme_cam_otp_checksum(rear_cam_otp) == 0) {
-		memcpy(data, rear_cam_otp+addr, size);
-		return size;
-	}
-
 	return 0;
 }
 

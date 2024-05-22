@@ -68,7 +68,6 @@
 #include "disp_recovery.h"
 #include "disp_partial.h"
 #include "ddp_dsi.h"
-#include "lcm_drv.h"
 
 /* For abnormal check */
 static struct task_struct *primary_display_check_task;
@@ -521,119 +520,6 @@ DISPTORY:
 	return ret;
 }
 
-int do_lcm_vdo_read(struct ddp_lcm_read_cmd_table *read_table)
-{
-	int ret = 0;
-	int i = 0;
-	struct cmdqRecStruct *handle;
-
-	static cmdqBackupSlotHandle read_Slot;
-	struct rx_data rx_data0 = {0x00};
-	struct rx_data rx_data1 = {0x00};
-	/*use read_table data0 to return read value*/
-	unsigned char packet_type = 0x00;
-
-	primary_display_manual_lock();
-
-	if (primary_get_state() == DISP_SLEPT) {
-		DISPINFO("primary display path is slept?? -- skip read\n");
-		primary_display_manual_unlock();
-		return -1;
-	}
-
-	/* 0.create esd check cmdq */
-	cmdqRecCreate(CMDQ_SCENARIO_DISP_ESD_CHECK, &handle);
-	cmdqBackupAllocateSlot(&read_Slot, 6);
-	for (i = 0; i < 6; i++)
-		cmdqBackupWriteSlot(read_Slot, i, 0xff00ff00);
-
-	/* 1.use cmdq to read from lcm */
-	if (primary_display_is_video_mode()) {
-
-		/* 1.reset */
-		cmdqRecReset(handle);
-
-		/* wait stream eof first */
-		/*cmdqRecWait(handle, CMDQ_EVENT_DISP_RDMA0_EOF);*/
-		cmdqRecWait(handle, CMDQ_EVENT_MUTEX0_STREAM_EOF);
-
-		/* 2.stop dsi vdo mode */
-		dpmgr_path_build_cmdq(primary_get_dpmgr_handle(),
-			handle, CMDQ_STOP_VDO_MODE, 0);
-
-		/* 3.read from lcm */
-		ddp_dsi_read_lcm_test_cmdq(DISP_MODULE_DSI0, &read_Slot, handle,
-			read_table);
-
-		/* 4.start dsi vdo mode */
-		dpmgr_path_build_cmdq(primary_get_dpmgr_handle(),
-			handle, CMDQ_START_VDO_MODE, 0);
-
-		cmdqRecClearEventToken(handle, CMDQ_EVENT_MUTEX0_STREAM_EOF);
-
-		/* 5. trigger path */
-		dpmgr_path_trigger(primary_get_dpmgr_handle(), handle,
-			CMDQ_ENABLE);
-
-		/*	mutex sof wait*/
-		ddp_mutex_set_sof_wait(
-			dpmgr_path_get_mutex(primary_get_dpmgr_handle()),
-			handle, 0);
-
-
-		/* 6.flush instruction */
-		ret = cmdqRecFlush(handle);
-
-	} else {
-		DISPINFO("Not support cmd mode\n");
-	}
-
-	if (ret == 1) {	/* cmdq fail */
-		if (need_wait_esd_eof()) {
-			/* Need set esd check eof */
-			/*synctoken to let trigger loop go. */
-			cmdqCoreSetEvent(CMDQ_SYNC_TOKEN_ESD_EOF);
-		}
-		/* do dsi reset */
-		dpmgr_path_build_cmdq(primary_get_dpmgr_handle(), handle,
-			 CMDQ_DSI_RESET, 0);
-		goto DISPTORY;
-	}
-
-	for (i = 0; i < 3; i++) {
-		cmdqBackupReadSlot(read_Slot, 2*i,
-		(uint32_t *)&rx_data0);
-		cmdqBackupReadSlot(read_Slot, 2*i+1,
-		(uint32_t *)&rx_data1);
-		packet_type = rx_data0.byte0;
-
-		DISPERR("rx_data0 b0 %x, b1 %x, b2 %x, b3 = %x\n",
-			rx_data0.byte0, rx_data0.byte1, rx_data0.byte2, rx_data0.byte3);
-
-		if (packet_type == 0x1A || packet_type == 0x1C) {
-			read_table->data[i].byte0 = rx_data1.byte0;
-		} else if (packet_type == 0x11 || packet_type == 0x12 ||
-					packet_type == 0x21 || packet_type == 0x22) {
-			read_table->data[i].byte0 = rx_data0.byte1;
-		} else {
-			DISPERR("packet_type error!\n");
-		}
-	}
-
-DISPTORY:
-	if (read_Slot) {
-		cmdqBackupFreeSlot(read_Slot);
-		read_Slot = 0;
-	}
-
-	/* 7.destroy esd config thread */
-	cmdqRecDestroy(handle);
-	primary_display_manual_unlock();
-
-	return ret;
-}
-
-
 int do_lcm_vdo_lp_write(struct ddp_lcm_write_cmd_table *write_table,
 			unsigned int count)
 {
@@ -856,10 +742,6 @@ static int primary_display_check_recovery_worker_kthread(void *data)
 
 		i = 0; /* repeat */
 		do {
-			_primary_path_switch_dst_unlock();
-			/*delay 2 frames (17x2 ms) to avoid lcm not ready for register read*/
-			msleep(34);
-			_primary_path_switch_dst_lock();
 			ret = primary_display_esd_check();
 			if (!ret) /* success */
 				break;
@@ -897,15 +779,6 @@ int primary_display_esd_recovery(void)
 	enum DISP_STATUS ret = DISP_STATUS_OK;
 	struct LCM_PARAMS *lcm_param = NULL;
 	mmp_event mmp_r = ddp_mmp_get_events()->esd_recovery_t;
-
-#if defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	char buf[METRICS_STR_LEN];
-	minerva_metrics_log(buf, METRICS_STR_LEN, "%s:%s:100:%s,%s,%s,%s,"
-			"lcm_state=lcm_recovery;SY,ESD_Recovery=1;IN:us-east-1",
-			METRICS_LCD_GROUP_ID, METRICS_LCD_SCHEMA_ID,
-			PREDEFINED_ESSENTIAL_KEY, PREDEFINED_MODEL_KEY,
-			PREDEFINED_TZ_KEY, PREDEFINED_DEVICE_LANGUAGE_KEY);
-#endif
 
 	DISPFUNC();
 	dprec_logger_start(DPREC_LOGGER_ESD_RECOVERY, 0, 0);
@@ -962,7 +835,6 @@ int primary_display_esd_recovery(void)
 	/*after dsi_stop, we should enable the dsi basic irq.*/
 	dsi_basic_irq_enable(DISP_MODULE_DSI0, NULL);
 	disp_lcm_suspend(primary_get_lcm());
-	disp_lcm_suspend_power(primary_get_lcm());
 	DISPCHECK("[POWER]lcm suspend[end]\n");
 
 	mmprofile_log_ex(mmp_r, MMPROFILE_FLAG_PULSE, 0, 7);

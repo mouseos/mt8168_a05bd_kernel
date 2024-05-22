@@ -28,6 +28,14 @@
 #include <mt-plat/mtk_lpae.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
+
+struct cmdqDebugInfoStruct {
+	dma_addr_t pa;
+	u32 *va;
+	int size;
+	struct clk *clk_cq_dma;
+};
 
 struct CmdqDeviceStruct {
 	struct device *pDev;
@@ -42,7 +50,7 @@ struct CmdqDeviceStruct {
 static struct CmdqDeviceStruct gCmdqDev;
 static u32 gThreadCount;
 static u32 gMMSYSDummyRegOffset;
-
+static struct cmdqDebugInfoStruct gCmdqDebugInfo;
 struct device *cmdq_dev_get(void)
 {
 	return gCmdqDev.pDev;
@@ -527,6 +535,12 @@ void cmdq_dev_init(struct platform_device *pDevice)
 	cmdq_get_func()->initModulePAStat();
 	/* init load HW information from device tree */
 	cmdq_dev_init_device_tree(node);
+
+	gCmdqDebugInfo.clk_cq_dma = devm_clk_get(&pDevice->dev, "CQDMA");
+	gCmdqDebugInfo.size = 16;
+	gCmdqDebugInfo.va = dma_alloc_coherent(cmdq_dev_get(),
+		gCmdqDebugInfo.size,
+		&gCmdqDebugInfo.pa, GFP_KERNEL);
 }
 
 void cmdq_dev_deinit(void)
@@ -541,4 +555,69 @@ void cmdq_dev_deinit(void)
 			cmdq_dev_get_module_base_VA_GCE());
 		gCmdqDev.regBaseVA = 0;
 	} while (0);
+}
+
+int cmdq_dev_use_cqdma_copy_dram(u32 dst_pa, u32 src_pa, int copy_size)
+{
+	/*
+	 * CQDMA base address: 0x10212000
+	 * Use method:
+	 * 1. setting source address: 0x1021201C
+	 * 2. setting destination address: 0x10212020
+	 * 3. setting data length: 0x10212024
+	 * 4. start working: 0x10212008[0]
+	 * when DMA copy done: 0x10212008[0] will change from 1 -> 0
+	 */
+	u32 dma_base_pa = 0x10212000;
+	u32 *dma_base_va = ioremap(dma_base_pa, 0x100);
+	int delay_count = 0;
+
+	if (dma_base_va == NULL) {
+		CMDQ_ERR("remap dma base va fail\n");
+		return -1;
+	}
+	CMDQ_ERR("enable cq dma clock, copy:src:0x%08x dst:0x%08x size:%d\n",
+		src_pa,
+		dst_pa,
+		copy_size);
+	cmdq_dev_enable_device_clock(true, gCmdqDebugInfo.clk_cq_dma, "CQDMA");
+
+	*(dma_base_va + 0x001C / 4) = src_pa;
+	*(dma_base_va + 0x0020 / 4) = dst_pa;
+	*(dma_base_va + 0x0024 / 4) = copy_size;
+
+	*(dma_base_va + 0x0008 / 4) = 1;	/* trigger */
+	while ((*(dma_base_va + 0x0008 / 4) & 0x01) && delay_count++ < 2) {
+		CMDQ_ERR("readback data:0x%08x\n", *(dma_base_va + 0x0008 / 4));
+		msleep_interruptible(1);
+	}
+
+	cmdq_dev_enable_device_clock(false, gCmdqDebugInfo.clk_cq_dma, "CQDMA");
+	if (delay_count >= 2) {
+		CMDQ_ERR("cqdma copy timeout:%d\n", delay_count);
+		return -1;
+	}
+	CMDQ_ERR("cqdma copy done\n");
+	return 0;
+}
+
+int cmdq_dev_copy_task_to_dram(u32 pc, int *va)
+{
+	CMDQ_ERR("enter debug\n");
+	if (va == NULL) {
+		CMDQ_ERR("can't find va in error task\n");
+		return 0;
+	}
+	CMDQ_ERR("PC:0x%08x VA:0x%08x 0x%08x\n",
+		pc,
+		va[0],
+		va[1]);
+	if (cmdq_dev_use_cqdma_copy_dram(gCmdqDebugInfo.pa,
+		pc, gCmdqDebugInfo.size) == 0)
+		CMDQ_ERR("DRAM copied PC:0x%08x VA:0x%08x 0x%08x\n",
+			(u32)gCmdqDebugInfo.pa,
+			gCmdqDebugInfo.va[0],
+			gCmdqDebugInfo.va[1]);
+	CMDQ_ERR("leave debug\n");
+	return 0;
 }

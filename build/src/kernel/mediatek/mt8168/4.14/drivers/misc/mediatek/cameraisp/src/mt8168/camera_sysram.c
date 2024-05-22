@@ -820,7 +820,7 @@ static int SYSRAM_Flush(struct file *pFile, fl_owner_t Id)
  */
 static int SYSRAM_mmap(struct file *pFile, struct vm_area_struct *pVma)
 {
-	unsigned long length = 0;
+	long length = 0;
 	unsigned int pfn = 0x0;
 	/* LOG_MSG(""); */
 	pVma->vm_page_prot = pgprot_noncached(pVma->vm_page_prot);

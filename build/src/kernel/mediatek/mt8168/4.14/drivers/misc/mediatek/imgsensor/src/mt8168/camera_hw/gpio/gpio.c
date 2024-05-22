@@ -84,9 +84,6 @@ static enum IMGSENSOR_RETURN gpio_release(void *pinstance)
 	for (i = GPIO_CTRL_STATE_CAM0_PDN_L;
 		i < GPIO_CTRL_STATE_MAX_NUM;
 		i += 2) {
-		if (i == GPIO_CTRL_STATE_CAM0_PDN_L ||
-		    i == GPIO_CTRL_STATE_CAM1_PDN_L)
-			continue;
 		mutex_lock(&pinctrl_mutex);
 		if (gpio_pinctrl_list[i].ppinctrl_lookup_names != NULL &&
 			pgpio->ppinctrl_state[i] != NULL &&

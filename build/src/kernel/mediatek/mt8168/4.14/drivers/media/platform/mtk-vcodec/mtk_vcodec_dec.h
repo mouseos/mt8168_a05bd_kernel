@@ -66,7 +66,7 @@ enum eos_types {
  * @lastframe:  Output buffer is last buffer - EOS
  * @bs_buffer:  Decode status, and buffer information of Output buffer
  * @frame_buffer:       Decode status, and buffer information of Capture buffer
- * @flags:  flags derived from v4l2_buffer for cache operations
+ * @flags:  flags derived from v4l2_buffer for buffer operations
  *
  * Note : These status information help us track and debug buffer state
  */

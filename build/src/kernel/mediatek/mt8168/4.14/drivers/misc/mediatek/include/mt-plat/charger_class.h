@@ -61,9 +61,6 @@ struct charger_ops {
 	int (*set_charging_current)(struct charger_device *dev, u32 uA);
 	int (*get_min_charging_current)(struct charger_device *dev, u32 *uA);
 
-	/* switch power EN_N pin state*/
-	int (*switch_power_state)(struct charger_device *cdev, int level);
-
 	/* set cv */
 	int (*set_constant_voltage)(struct charger_device *dev, u32 uV);
 	int (*get_constant_voltage)(struct charger_device *dev, u32 *uV);
@@ -89,7 +86,6 @@ struct charger_ops {
 	int (*enable_cable_drop_comp)(struct charger_device *dev, bool en);
 
 	int (*set_mivr)(struct charger_device *dev, u32 uV);
-	int (*get_mivr)(struct charger_device *dev, u32 *uV);
 	int (*get_mivr_state)(struct charger_device *dev, bool *in_loop);
 
 	/* enable/disable powerpath */
@@ -137,16 +133,6 @@ struct charger_ops {
 	int (*get_tchg_adc)(struct charger_device *dev, int *tchg_min,
 		int *tchg_max);
 	int (*get_zcv)(struct charger_device *dev, u32 *uV);
-
-	/* enable/disable IR compensation */
-	int (*enable_ir_comp)(struct charger_device *, bool en);
-	/* WPC */
-	int (*get_wpc_online)(struct charger_device *dev, bool *stat);
-	int (*do_wpc_algorithm)(struct charger_device *dev, void *data);
-	int (*force_enable_wpc_charge)(struct charger_device *dev, bool en);
-	int (*get_temp)(struct charger_device *dev);
-	int (*set_wpc_en)(struct charger_device *dev, bool en);
-	int (*set_sleep_en)(struct charger_device *dev, bool en);
 };
 
 static inline void *charger_dev_get_drvdata(
@@ -188,8 +174,6 @@ extern int charger_dev_get_charging_current(
 	struct charger_device *charger_dev, u32 *uA);
 extern int charger_dev_get_min_charging_current(
 	struct charger_device *charger_dev, u32 *uA);
-extern int charger_dev_switch_power_state(
-	struct charger_device *charger_dev, int level);
 extern int charger_dev_set_input_current(
 	struct charger_device *charger_dev, u32 uA);
 extern int charger_dev_get_input_current(
@@ -212,8 +196,6 @@ extern int charger_dev_enable_vbus_ovp(
 	struct charger_device *charger_dev, bool en);
 extern int charger_dev_set_mivr(
 	struct charger_device *charger_dev, u32 uV);
-extern int charger_dev_get_mivr(
-	struct charger_device *charger_dev, u32 *uV);
 extern int charger_dev_get_mivr_state(
 	struct charger_device *charger_dev, bool *in_loop);
 extern int charger_dev_do_event(
@@ -246,8 +228,6 @@ extern int charger_dev_reset_eoc_state(
 	struct charger_device *charger_dev);
 extern int charger_dev_safety_check(
 	struct charger_device *charger_dev);
-extern int charger_dev_enable_ir_comp(
-	struct charger_device *charger_dev, bool en);
 
 /* PE+/PE+2.0 */
 extern int charger_dev_send_ta_current_pattern(
@@ -290,16 +270,6 @@ extern int unregister_charger_device_notifier(
 				struct notifier_block *nb);
 extern int charger_dev_notify(
 	struct charger_device *charger_dev, int event);
-/* WPC */
-extern int wireless_charger_dev_get_online(
-	struct charger_device *chg_dev, bool *stat);
-extern int wireless_charger_dev_do_algorithm(
-	struct charger_device *chg_dev, void *data);
-extern int wireless_charger_dev_force_en_charge(
-	struct charger_device *chg_dev, bool en);
-extern int wireless_charger_dev_set_wpc_en(
-	struct charger_device *chg_dev, bool en);
-extern int wireless_charger_dev_set_sleep_en(
-	struct charger_device *chg_dev, bool en);
+
 
 #endif /*LINUX_POWER_CHARGER_CLASS_H*/

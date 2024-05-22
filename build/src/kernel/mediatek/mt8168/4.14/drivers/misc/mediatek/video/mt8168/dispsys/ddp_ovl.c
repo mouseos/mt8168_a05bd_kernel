@@ -960,7 +960,7 @@ int ovl_switch_to_nonsec(enum DISP_MODULE_ENUM module, void *handle)
 {
 	unsigned int ovl_idx = ovl_to_index(module);
 	enum CMDQ_ENG_ENUM cmdq_engine;
-	/*enum CMDQ_EVENT_ENUM cmdq_event_nonsec_end;*/
+	enum CMDQ_EVENT_ENUM cmdq_event_nonsec_end;
 	enum CMDQ_DISP_MODE mode = ovl_get_sec_mode(module);
 
 	cmdq_engine = ovl_to_cmdq_engine(module);
@@ -968,13 +968,6 @@ int ovl_switch_to_nonsec(enum DISP_MODULE_ENUM module, void *handle)
 	if (ovl_is_sec[ovl_idx] == 1) {
 		/* ovl is in sec stat, we need to switch it to nonsec */
 		struct cmdqRecStruct *nonsec_switch_handle;
-
-		if (!handle) {
-			DDPERR("%s handle NULL\n", __func__);
-			return -1;
-		}
-		nonsec_switch_handle = handle;
-#if 0
 		int ret;
 
 		ret = cmdqRecCreate(
@@ -985,7 +978,7 @@ int ovl_switch_to_nonsec(enum DISP_MODULE_ENUM module, void *handle)
 				__func__, ret);
 
 		cmdqRecReset(nonsec_switch_handle);
-#endif
+
 		if (module != DISP_MODULE_OVL1_2L) {
 			/* Primary Mode */
 			if (primary_display_is_decouple_mode())
@@ -1002,7 +995,7 @@ int ovl_switch_to_nonsec(enum DISP_MODULE_ENUM module, void *handle)
 		cmdqRecSetSecure(nonsec_switch_handle, 1);
 
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
-		cmdqRecSetSecureMode(nonsec_switch_handle, mode);
+		cmdqRecSetSecureMode(handle, mode);
 #endif
 
 		/*
@@ -1010,13 +1003,11 @@ int ovl_switch_to_nonsec(enum DISP_MODULE_ENUM module, void *handle)
 		 * effect, or translation fault may happen.
 		 * if we switch ovl to nonsec BUT its setting is still sec
 		 */
-		/*disable_ovl_layers(module, nonsec_switch_handle);*/
+		disable_ovl_layers(module, nonsec_switch_handle);
 		/* in fact, dapc/port_sec will be disabled by cmdq */
-		cmdqRecSecureDisablePortSecurity(
+		cmdqRecSecureEnablePortSecurity(
 			nonsec_switch_handle, (1LL << cmdq_engine));
-		cmdqRecSecureDisableDAPC(
-			nonsec_switch_handle, (1LL << cmdq_engine));
-#if 0
+
 		if (handle != NULL) {
 			/* Async Flush method */
 			cmdq_event_nonsec_end =
@@ -1031,8 +1022,6 @@ int ovl_switch_to_nonsec(enum DISP_MODULE_ENUM module, void *handle)
 		}
 
 		cmdqRecDestroy(nonsec_switch_handle);
-#endif
-		g_to_nonsec = true;
 		DDPSVPMSG("[SVP] switch ovl%d to nonsec mode=%d\n",
 			ovl_idx, mode);
 		mmprofile_log_ex(ddp_mmp_get_events()->svp_module[module],
@@ -1069,7 +1058,7 @@ static int setup_ovl_sec(enum DISP_MODULE_ENUM module,
 	if (has_sec_layer == 1)
 		ret = ovl_switch_to_sec(module, handle);
 	else
-		ret = ovl_switch_to_nonsec(module, handle);
+		ret = ovl_switch_to_nonsec(module, NULL);
 
 	if (ret)
 		DDPAEE("[SVP]fail to %s: ret=%d\n",

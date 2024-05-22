@@ -871,10 +871,4 @@ config INPUT_HISI_POWERKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called hisi_powerkey.
 
-config INPUT_HALL_BU520
-	bool "BU520 hall sensor support"
-	default n
-	help
-	  Support for ROHM BU520 hall sensor.
-
 endif

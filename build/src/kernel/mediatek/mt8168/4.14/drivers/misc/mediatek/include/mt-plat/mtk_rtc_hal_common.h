@@ -26,8 +26,7 @@ enum rtc_spare_enum {
 	RTC_32K_LESS,
 	RTC_LP_DET,
 	RTC_FG_INIT,
-	RTC_ENTER_KPOC,
-	RTC_SW_LPRST,
+	RTC_POWEROFF,
 	RTC_SPAR_NUM
 };
 

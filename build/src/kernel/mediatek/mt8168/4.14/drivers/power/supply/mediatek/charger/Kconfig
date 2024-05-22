@@ -8,14 +8,6 @@ config MTK_CHARGER
 	  maintains charging status.
 	  Say no if not using MediaTek charging driver.
 
-config MTK_USE_AGING_ZCV
-	bool "MediaTek Switch ZCV table"
-	default n
-	help
-	  Say Y to enable
-	  Allow it to change to another ZCV table when battery aging
-	  Need to cooperate with GM30
-
 config POWER_EXT
 	bool "MediaTek Power Ext"
 	default n
@@ -116,3 +108,23 @@ config MTK_CHARGER_UNLIMITED
 	  Say No to not release charging current restrictions.
 	  It is mainly used for long-term tests.
 	  It depends on config MTK_CHARGER.
+
+config CHARGER_BQ24160
+	bool "Charger Driver for BQ24160 Charger IC"
+	default n
+	depends on MTK_CHARGER
+	help
+	  Say Yes to enable BQ24160 driver.
+	  It depends on config MTK_CHARGER.
+
+config GAUGE_LC709203F
+	bool "Enable Gauge LC709203F"
+	default n
+	help
+		Say Yes to enable LC709203F driver.
+
+config STS_CHARGER
+	bool "Enable STS CHARGE Battery system"
+	default n
+	help
+		Say Yes to enable STS CHARGE Battery system driver.

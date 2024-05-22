@@ -118,8 +118,6 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_RT274 if I2C
 	select SND_SOC_RT286 if I2C
 	select SND_SOC_RT298 if I2C
-	select SND_SOC_RT551X if I2C
-	select SND_SOC_RT551X_SPI if SPI_MASTER
 	select SND_SOC_RT5514 if I2C
 	select SND_SOC_RT5616 if I2C
 	select SND_SOC_RT5631 if I2C
@@ -147,6 +145,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_STAC9766 if SND_SOC_AC97_BUS
 	select SND_SOC_STI_SAS
 	select SND_SOC_TAS2552 if I2C
+	select SND_SOC_TAS2505 if I2C
 	select SND_SOC_TAS5086 if I2C
 	select SND_SOC_TAS571X if I2C
 	select SND_SOC_TAS5720 if I2C
@@ -753,18 +752,6 @@ config SND_SOC_RT5514
 config SND_SOC_RT5514_SPI
 	tristate
 
-config SND_SOC_RT551X
-        tristate "SND_SOC_RT551X"
-        default y if SND_SOC_RT551X_SPI=y
-
-config SND_SOC_RT551X_SPI
-        tristate "SND_SOC_RT551X_SPI"
-        depends on SPI_MASTER
-
-config SND_SOC_RT551X_TEST_ONLY
-        tristate "SND_SOC_RT551X_TEST_ONLY"
-        depends on SND_SOC_RT551X_SPI
-
 config SND_SOC_RT5616
 	tristate "Realtek RT5616 CODEC"
 	depends on I2C
@@ -878,6 +865,10 @@ config SND_SOC_STI_SAS
 
 config SND_SOC_TAS2552
 	tristate "Texas Instruments TAS2552 Mono Audio amplifier"
+	depends on I2C
+
+config SND_SOC_TAS2505
+	tristate "Texas Instruments TAS2505 Mono Audio amplifier"
 	depends on I2C
 
 config SND_SOC_TAS5086

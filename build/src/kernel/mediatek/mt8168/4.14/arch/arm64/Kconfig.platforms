@@ -163,10 +163,10 @@ config MACH_MT8168
 	select MTK_BOUNCING_CHECK if AEE_FEATURE
 	select COMPAT
 	select MTK_EMI
+	select MTK_DRAMC
 	select MTK_DEBUG_LATCH
 	select MTK_PLAT_SRAM_FLAG
 	select MTK_L2C_PARITY_CHECK
-	select MTK_DRAMC
         help
           This enables support for MediaTek MT8168
           Support for aarch64 Architecture

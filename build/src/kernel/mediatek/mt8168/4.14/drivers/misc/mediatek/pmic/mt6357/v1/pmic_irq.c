@@ -20,7 +20,6 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of_irq.h>
-#include <linux/reboot.h>
 #include <linux/sched.h>
 
 
@@ -61,14 +60,6 @@
 /*#include <mt-plat/battery_meter.h> TBD*/
 #endif
 #include <mt-plat/mtk_ccci_common.h>
-#include <mt-plat/mtk_rtc.h>
-
-#if defined (CONFIG_AMAZON_METRICS_LOG) || defined (CONFIG_AMAZON_MINERVA_METRICS_LOG)
-#include <linux/metricslog.h>
-static struct work_struct metrics_work;
-static bool pwrkey_press;
-static void pwrkey_log_to_metrics(struct work_struct *data);
-#endif
 
 /*---IPI Mailbox define---*/
 /*#define IPIMB*/
@@ -79,16 +70,6 @@ unsigned int g_eint_pmic_num = 176;	/* TBD */
 unsigned int g_cust_eint_mt_pmic_debounce_cn = 1;
 unsigned int g_cust_eint_mt_pmic_type = 4;
 unsigned int g_cust_eint_mt_pmic_debounce_en = 1;
-
-#if defined(CONFIG_MTK_KERNEL_POWER_OFF_CHARGING)
-#define KPOC_LONG_PRESS_TIME	(500 * 1000 * 1000)	/* 500 ms */
-#define KPOC_DEFER_TIME		(msecs_to_jiffies(2000))	/* 2 s */
-static struct hrtimer kpoc_reboot_timer;
-static void check_pwrkey(struct work_struct *dummy);
-static DECLARE_WORK(pwrkey_check_work, check_pwrkey);
-static void deferred_restart(struct work_struct *dummy);
-static DECLARE_DELAYED_WORK(restart_work, deferred_restart);
-#endif
 
 /* PMIC extern variable */
 
@@ -330,32 +311,6 @@ static struct usb_extcon_info *extcon_info;
 struct delayed_work extcon_work;
 #endif
 
-#if defined (CONFIG_AMAZON_METRICS_LOG) || defined (CONFIG_AMAZON_MINERVA_METRICS_LOG)
-#define PWRKEY_METRICS_STR_LEN 512
-static void pwrkey_log_to_metrics(struct work_struct *data)
-{
-	char *action;
-	char buf[PWRKEY_METRICS_STR_LEN];
-
-#if defined (CONFIG_AMAZON_METRICS_LOG)
-	action = (pwrkey_press) ? "press" : "release";
-	snprintf(buf, PWRKEY_METRICS_STR_LEN,
-		"%s:powi%c:report_action_is_%s=1;CT;1:NR", __func__,
-		action[0], action);
-	log_to_metrics(ANDROID_LOG_INFO, "PowerKeyEvent", buf);
-#endif
-
-#if defined (CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	action = (pwrkey_press) ? "press" : "release";
-	minerva_metrics_log(buf, PWRKEY_METRICS_STR_LEN,
-		"%s:%s:100:%s,report_action_is_action=%s;SY:us-east-1",
-		METRICS_PWRKEY_GROUP_ID, METRICS_PWRKEY_SCHEMA_ID,
-		PREDEFINED_ESSENTIAL_KEY, action);
-#endif
-
-}
-#endif
-
 #if IRQ_HANDLER_READY
 /* PWRKEY Int Handler */
 void pwrkey_int_handler(void)
@@ -363,19 +318,10 @@ void pwrkey_int_handler(void)
 	IRQLOG("[%s] Press pwrkey %d\n", __func__,
 		pmic_get_register_value(PMIC_PWRKEY_DEB));
 
-#if defined(CONFIG_MTK_KERNEL_POWER_OFF_CHARGING)
-	if (get_boot_mode() == KERNEL_POWER_OFF_CHARGING_BOOT)
-		hrtimer_start(&kpoc_reboot_timer,
-			ktime_set(0, KPOC_LONG_PRESS_TIME), HRTIMER_MODE_REL);
-#endif
-
 #if !defined(CONFIG_FPGA_EARLY_PORTING) && defined(CONFIG_KPD_PWRKEY_USE_PMIC)
+#if defined(CONFIG_KEYBOARD_MTK)
 	kpd_pwrkey_pmic_handler(0x1);
 #endif
-
-#if defined (CONFIG_AMAZON_METRICS_LOG) || defined (CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	pwrkey_press = true;
-	schedule_work(&metrics_work);
 #endif
 }
 
@@ -384,18 +330,10 @@ void pwrkey_int_handler_r(void)
 	IRQLOG("[%s] Release pwrkey %d\n", __func__,
 		pmic_get_register_value(PMIC_PWRKEY_DEB));
 
-#if defined(CONFIG_MTK_KERNEL_POWER_OFF_CHARGING)
-	if (get_boot_mode() == KERNEL_POWER_OFF_CHARGING_BOOT)
-		hrtimer_cancel(&kpoc_reboot_timer);
-#endif
-
 #if !defined(CONFIG_FPGA_EARLY_PORTING) && defined(CONFIG_KPD_PWRKEY_USE_PMIC)
+#if defined(CONFIG_KEYBOARD_MTK)
 	kpd_pwrkey_pmic_handler(0x0);
 #endif
-
-#if defined (CONFIG_AMAZON_METRICS_LOG) || defined (CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	pwrkey_press = false;
-	schedule_work(&metrics_work);
 #endif
 }
 
@@ -405,7 +343,9 @@ void homekey_int_handler(void)
 	IRQLOG("[%s] Press homekey %d\n", __func__,
 		pmic_get_register_value(PMIC_HOMEKEY_DEB));
 #if !defined(CONFIG_FPGA_EARLY_PORTING)
+#if defined(CONFIG_KEYBOARD_MTK)
 	kpd_pmic_rstkey_handler(0x1);
+#endif
 #endif
 }
 
@@ -414,16 +354,20 @@ void homekey_int_handler_r(void)
 	IRQLOG("[%s] Release homekey %d\n", __func__,
 		pmic_get_register_value(PMIC_HOMEKEY_DEB));
 #if !defined(CONFIG_FPGA_EARLY_PORTING)
+#if defined(CONFIG_KEYBOARD_MTK)
 	kpd_pmic_rstkey_handler(0x0);
+#endif
 #endif
 }
 
 /* Chrdet Int Handler */
-#if (CONFIG_MTK_GAUGE_VERSION != 30)
+#if 0
+//#if (CONFIG_MTK_GAUGE_VERSION != 30)
 void chrdet_int_handler(void)
 {
 	IRQLOG("[%s]CHRDET status = %d\n", __func__,
 		pmic_get_register_value(PMIC_RGS_CHRDET));
+
 #ifdef CONFIG_MTK_KERNEL_POWER_OFF_CHARGING
 	if (!upmu_get_rgs_chrdet()) {
 		int boot_mode = 0;
@@ -433,9 +377,7 @@ void chrdet_int_handler(void)
 		if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT
 		|| boot_mode == LOW_POWER_OFF_CHARGING_BOOT) {
 			IRQLOG("[%s] Unplug Charger/USB\n", __func__);
-#ifdef CONFIG_MTK_RTC
-			mt_power_off();
-#endif
+			kernel_power_off();
 		}
 	}
 #endif
@@ -555,21 +497,6 @@ irqreturn_t mt_pmic_eint_irq(int irq, void *desc)
 	wake_up_pmic();
 	return IRQ_HANDLED;
 }
-
-#ifdef CONFIG_INPUT_AMZN_KEYCOMBO
-bool check_pwrkey_status(void)
-{
-	int ret = 0;
-
-	/*Power key pressing will return 0, else return 1*/
-	ret = pmic_get_register_value(PMIC_PWRKEY_DEB);
-	if (!ret)
-		return true;
-
-	return false;
-}
-EXPORT_SYMBOL(check_pwrkey_status);
-#endif
 
 static unsigned int get_spNo(enum PMIC_IRQ_ENUM intNo)
 {
@@ -927,7 +854,8 @@ static void register_irq_handlers(void)
 	pmic_register_interrupt_callback(INT_PWRKEY_R, pwrkey_int_handler_r);
 	pmic_register_interrupt_callback(INT_HOMEKEY_R, homekey_int_handler_r);
 
-#if (CONFIG_MTK_GAUGE_VERSION != 30)
+#if 0
+//#if (CONFIG_MTK_GAUGE_VERSION != 30)
 	pmic_register_interrupt_callback(INT_CHRDET_EDGE, chrdet_int_handler);
 #endif
 #endif
@@ -972,37 +900,6 @@ static void init_extcon_work(struct work_struct *work)
 	schedule_delayed_work(&extcon_info->wq_detcable, msecs_to_jiffies(100));
 }
 
-#endif
-
-#if defined(CONFIG_MTK_KERNEL_POWER_OFF_CHARGING)
-static void check_pwrkey(struct work_struct *dummy)
-{
-	if (!pmic_get_register_value(PMIC_PWRKEY_DEB))
-		queue_delayed_work(system_highpri_wq, &restart_work, 0);
-}
-
-static void deferred_restart(struct work_struct *dummy)
-{
-	if (likely(system_state >= SYSTEM_RUNNING)) {
-		pr_notice("Long Press Power Key Pressed during kernel power off charging, reboot OS\n");
-		orderly_reboot();
-	} else {
-		pr_notice("Defer long press power key event handle\n");
-		queue_delayed_work(system_highpri_wq,
-			&restart_work, KPOC_DEFER_TIME);
-	}
-}
-
-enum hrtimer_restart kpoc_reboot_timer_func(struct hrtimer *timer)
-{
-	if (!delayed_work_pending(&restart_work)) {
-		pr_notice("Queue task to check power key\n");
-		queue_work(system_highpri_wq, &pwrkey_check_work);
-	} else {
-		pr_notice("Has deferred long press power key event handle\n");
-	}
-	return HRTIMER_NORESTART;
-}
 #endif
 
 void PMIC_EINT_SETTING(struct platform_device *pdev)
@@ -1070,15 +967,6 @@ void PMIC_EINT_SETTING(struct platform_device *pdev)
 		enable_irq_wake(g_pmic_irq);
 	} else
 		pr_notice(PMICTAG "can't find compatible node\n");
-
-#if defined(CONFIG_MTK_KERNEL_POWER_OFF_CHARGING)
-	hrtimer_init(&kpoc_reboot_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	kpoc_reboot_timer.function = kpoc_reboot_timer_func;
-#endif
-
-#if defined (CONFIG_AMAZON_METRICS_LOG) || defined (CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	INIT_WORK(&metrics_work, pwrkey_log_to_metrics);
-#endif
 
 	IRQLOG("[CUST_EINT] CUST_EINT_MT_PMIC_MT6357_NUM=%d\n"
 	       , g_eint_pmic_num);

@@ -51,8 +51,6 @@ static void mtk_cg_set_bit(struct clk_hw *hw)
 {
 	struct mtk_clk_gate *cg = to_mtk_clk_gate(hw);
 
-	if (!strncmp(clk_hw_get_name(hw), "mm_smi_common", 13))
-		pr_err("mm_smi_common off by ccf\n");
 	regmap_write(cg->regmap, cg->set_ofs, BIT(cg->bit));
 }
 

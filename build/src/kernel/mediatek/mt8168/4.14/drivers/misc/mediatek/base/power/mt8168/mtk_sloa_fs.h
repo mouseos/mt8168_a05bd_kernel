@@ -14,6 +14,6 @@ enum clk_26m {
 
 int sloa_suspend_26m_mode(enum clk_26m mode);
 void sloa_suspend_infra_power(bool on);
-bool sloa_is_conn2ap_wakeup(void);
 
 #endif
+

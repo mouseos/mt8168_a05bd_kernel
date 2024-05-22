@@ -1239,10 +1239,6 @@ s32 cmdq_task_reset(struct cmdqRecStruct *handle)
 		cmdq_task_set_secure(handle, false);
 		handle->secData.enginesNeedDAPC = 0LL;
 		handle->secData.enginesNeedPortSecurity = 0LL;
-
-		handle->secData.enginesDisablePortSecurity = 0LL;
-		handle->secData.enginesDisableDAPC = 0LL;
-		handle->secData.secMode = 0;
 	}
 
 	if (handle->timeout_info) {
@@ -1308,13 +1304,6 @@ s32 cmdq_task_set_secure_mode(struct cmdqRecStruct *handle,
 		return -EFAULT;
 
 	handle->secData.secMode = mode;
-
-	if (handle->secData.secMode < 0
-		|| handle->secData.secMode > CMDQ_IWC_MDP_USER_MODE) {
-		CMDQ_ERR("%s secMode = %d\n",
-			__func__, handle->secData.secMode);
-	}
-
 	return 0;
 }
 #endif
@@ -1334,22 +1323,6 @@ s32 cmdq_task_secure_enable_dapc(struct cmdqRecStruct *handle,
 #endif
 }
 
-int32_t cmdq_task_secure_disable_dapc(struct cmdqRecStruct *handle,
-	const uint64_t engineFlag)
-{
-#ifdef CMDQ_SECURE_PATH_SUPPORT
-	if (handle == NULL)
-		return -EFAULT;
-
-	handle->secData.enginesDisableDAPC |= engineFlag;
-	return 0;
-#else
-	CMDQ_ERR("%s failed since not support secure path\n", __func__);
-	return -EFAULT;
-#endif
-}
-
-
 s32 cmdq_task_secure_enable_port_security(
 	struct cmdqRecStruct *handle, const u64 engineFlag)
 {
@@ -1364,22 +1337,6 @@ s32 cmdq_task_secure_enable_port_security(
 	return -EFAULT;
 #endif
 }
-
-int32_t cmdq_task_secure_disable_port_security(struct cmdqRecStruct *handle,
-	const uint64_t engineFlag)
-{
-#ifdef CMDQ_SECURE_PATH_SUPPORT
-	if (handle == NULL)
-		return -EFAULT;
-
-	handle->secData.enginesDisablePortSecurity |= engineFlag;
-	return 0;
-#else
-	CMDQ_ERR("%s failed since not support secure path\n", __func__);
-	return -EFAULT;
-#endif
-}
-
 
 s32 cmdq_op_write_reg(struct cmdqRecStruct *handle, u32 addr,
 	CMDQ_VARIABLE argument, u32 mask)
@@ -1958,10 +1915,6 @@ s32 cmdq_setup_sec_data_of_command_desc_by_rec_handle(
 	pDesc->secData.enginesNeedDAPC = handle->secData.enginesNeedDAPC;
 	pDesc->secData.enginesNeedPortSecurity =
 		handle->secData.enginesNeedPortSecurity;
-	pDesc->secData.enginesDisablePortSecurity =
-		handle->secData.enginesDisablePortSecurity;
-	pDesc->secData.enginesDisableDAPC = handle->secData.enginesDisableDAPC;
-
 
 	pDesc->secData.addrMetadataCount = handle->secData.addrMetadataCount;
 	pDesc->secData.addrMetadatas = handle->secData.addrMetadatas;
@@ -3920,24 +3873,11 @@ s32 cmdqRecSecureEnableDAPC(struct cmdqRecStruct *handle, const u64 engineFlag)
 	return cmdq_task_secure_enable_dapc(handle, engineFlag);
 }
 
-int32_t cmdqRecSecureDisableDAPC(struct cmdqRecStruct *handle,
-	const uint64_t engineFlag)
-{
-	return cmdq_task_secure_disable_dapc(handle, engineFlag);
-}
-
 s32 cmdqRecSecureEnablePortSecurity(struct cmdqRecStruct *handle,
 	const u64 engineFlag)
 {
 	return cmdq_task_secure_enable_port_security(handle, engineFlag);
 }
-
-int32_t cmdqRecSecureDisablePortSecurity(struct cmdqRecStruct *handle,
-	const uint64_t engineFlag)
-{
-	return cmdq_task_secure_disable_port_security(handle, engineFlag);
-}
-
 
 s32 cmdqRecMark(struct cmdqRecStruct *handle)
 {

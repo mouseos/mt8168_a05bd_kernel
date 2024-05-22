@@ -144,19 +144,6 @@ void __attribute__((weak)) arch_reset(char mode, const char *cmd)
 static int rtc_show_time;
 static int rtc_show_alarm = 1;
 static int alarm1m15s;
-static unsigned long rtc_lock_flags;
-
-void rtc_acquire_lock(void)
-{
-	spin_lock_irqsave(&rtc_lock, rtc_lock_flags);
-}
-EXPORT_SYMBOL(rtc_acquire_lock);
-
-void rtc_release_lock(void)
-{
-	spin_unlock_irqrestore(&rtc_lock, rtc_lock_flags);
-}
-EXPORT_SYMBOL(rtc_release_lock);
 
 #if 1
 unsigned long rtc_read_hw_time(void)
@@ -335,6 +322,28 @@ void rtc_disable_abb_32k(void)
 	spin_unlock_irqrestore(&rtc_lock, flags);
 }
 
+void rtc_enable_32k1v8_1(void)
+{
+	#if defined(CONFIG_MTK_PMIC_CHIP_MT6390)
+	if (pmic_get_register_value(PMIC_SWCID) == PMIC_MT6390_CHIP_ID) {
+		pmic_set_register_value(PMIC_XO_RESERVED3, 0x1);
+		pmic_set_register_value(PMIC_RG_RTC_32K1V8_1_SEL, 0x0);
+		pmic_set_register_value(PMIC_RG_RTC32K_1V8_1_PDN, 0x0);
+	}
+	#endif
+}
+
+void rtc_disable_32k1v8_1(void)
+{
+	#if defined(CONFIG_MTK_PMIC_CHIP_MT6390)
+	if (pmic_get_register_value(PMIC_SWCID) == PMIC_MT6390_CHIP_ID) {
+		pmic_set_register_value(PMIC_XO_RESERVED3, 0x0);
+		pmic_set_register_value(PMIC_RG_RTC_32K1V8_1_SEL, 0x1);
+		pmic_set_register_value(PMIC_RG_RTC32K_1V8_1_PDN, 0x1);
+	}
+	#endif
+}
+
 void rtc_enable_writeif(void)
 {
 	unsigned long flags;
@@ -383,24 +392,6 @@ void rtc_mark_kpoc(void)
 	spin_unlock_irqrestore(&rtc_lock, flags);
 }
 
-void rtc_mark_sw_lprst(void)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&rtc_lock, flags);
-	hal_rtc_set_spare_register(RTC_SW_LPRST, 0x1);
-	spin_unlock_irqrestore(&rtc_lock, flags);
-}
-
-void rtc_mark_enter_kpoc(void)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&rtc_lock, flags);
-	hal_rtc_set_spare_register(RTC_ENTER_KPOC, 0x1);
-	spin_unlock_irqrestore(&rtc_lock, flags);
-}
-
 void rtc_mark_fast(void)
 {
 	unsigned long flags;
@@ -436,10 +427,9 @@ void rtc_bbpu_power_down(void)
 	unsigned char exist;
 
 	mtk_chr_is_charger_exist(&exist);
-	if (exist == 1 && !mtk_chr_is_dcap_enable()) {
+	if (exist == 1)
 		charger_status = true;
-		rtc_mark_enter_kpoc();
-	} else
+	else
 		charger_status = false;
 	rtc_xinfo("charger_status = %d\n", charger_status);
 #endif
@@ -502,6 +492,15 @@ void rtc_bbpu_power_down(void)
 	spin_unlock_irqrestore(&rtc_lock, flags);
 }
 
+void rtc_set_poweroff(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&rtc_lock, flags);
+	hal_rtc_set_spare_register(RTC_POWEROFF, 0x1);
+	spin_unlock_irqrestore(&rtc_lock, flags);
+}
+
 void mt_power_off(void)
 {
 #if !defined(CONFIG_POWER_EXT)
@@ -510,6 +509,11 @@ void mt_power_off(void)
 	unsigned char exist;
 #endif
 #endif
+	int platform_boot_mode;
+
+	platform_boot_mode = get_boot_mode();
+	if (platform_boot_mode == META_BOOT || platform_boot_mode == ADVMETA_BOOT)
+		rtc_set_poweroff();
 
 	rtc_xinfo("%s\n", __func__);
 	dump_stack();
@@ -528,7 +532,7 @@ void mt_power_off(void)
 #ifdef CONFIG_MTK_CHARGER
 		mtk_chr_is_charger_exist(&exist);
 		if (exist == 1 || count > 10) {
-			arch_reset(0, "enter_kpoc");
+			arch_reset(0, "charger");
 			break;
 		}
 #else

@@ -251,7 +251,7 @@ int mtktspmic_get_hw_temp(void)
 
 	mutex_lock(&TSPMIC_lock);
 
-	temp = pmic_get_auxadc_value(AUXADC_LIST_MT6357_CHIP_TEMP);
+	temp = pmic_get_auxadc_value(AUXADC_LIST_CHIP_TEMP);
 
 	temp1 = pmic_raw_to_temp(temp);
 
@@ -292,7 +292,7 @@ int mt6357tsbuck1_get_hw_temp(void)
 
 	mutex_lock(&TSPMIC_lock);
 
-	temp = pmic_get_auxadc_value(AUXADC_LIST_MT6357_BUCK1_TEMP);
+	temp = pmic_get_auxadc_value(AUXADC_LIST_BUCK1_TEMP);
 
 	temp1 = tsbuck1_raw_to_temp(temp);
 
@@ -331,7 +331,7 @@ int mt6357tsbuck2_get_hw_temp(void)
 
 	mutex_lock(&TSPMIC_lock);
 
-	temp = pmic_get_auxadc_value(AUXADC_LIST_MT6357_BUCK2_TEMP);
+	temp = pmic_get_auxadc_value(AUXADC_LIST_BUCK2_TEMP);
 
 	temp1 = tsbuck2_raw_to_temp(temp);
 

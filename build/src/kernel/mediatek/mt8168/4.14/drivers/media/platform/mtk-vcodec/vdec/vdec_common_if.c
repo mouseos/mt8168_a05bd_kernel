@@ -407,6 +407,7 @@ static void get_color_desc(struct vdec_inst *inst,
 {
 	if (inst->vsi == NULL)
 		return;
+
 	inst->vcu.ctx = inst->ctx;
 	memcpy(color_desc, &inst->vsi->color_desc, sizeof(*color_desc));
 }
@@ -415,6 +416,7 @@ static void get_aspect_ratio(struct vdec_inst *inst, unsigned int *aspect_ratio)
 {
 	if (inst->vsi == NULL)
 		return;
+
 	inst->vcu.ctx = inst->ctx;
 	*aspect_ratio = inst->vsi->aspect_ratio;
 }

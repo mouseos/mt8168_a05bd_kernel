@@ -61,6 +61,8 @@ void __iomem *DDRPHY_NAO_CHA_BASE_ADDR;
 void __iomem *DDRPHY_NAO_CHB_BASE_ADDR;
 #define DRAM_RSV_SIZE 0x1000
 
+/* #define DUMMY_READ_TEST */
+
 #ifdef SW_TX_TRACKING
 static unsigned int mr18_cur;
 static unsigned int mr19_cur;
@@ -93,6 +95,7 @@ __weak void *mt_spm_base_get(void)
 	return 0;
 }
 
+#ifdef DUMMY_READ_TEST
 /* Return 0 if success, -1 if failure */
 static int __init dram_dummy_read_fixup(void)
 {
@@ -180,6 +183,7 @@ const char *uname, int depth, void *data)
 
 	return node;
 }
+#endif
 
 #if defined(SW_TX_TRACKING) || defined(DRAMC_MEMTEST_DEBUG_SUPPORT)
 static unsigned int read_dram_mode_reg(
@@ -1963,14 +1967,14 @@ static int __init dram_test_init(void)
 		pr_warn("[DRAMC] init fail, ret 0x%x\n", ret);
 		return ret;
 	}
-
+#ifdef DUMMY_READ_TEST
 	if (of_scan_flat_dt(dt_scan_dram_info, NULL) > 0) {
 		pr_info("[DRAMC]find dt_scan_dram_info\n");
 	} else {
 		pr_err("[DRAMC]can't find dt_scan_dram_info\n");
 		return -1;
 	}
-
+#endif
 	return ret;
 }
 

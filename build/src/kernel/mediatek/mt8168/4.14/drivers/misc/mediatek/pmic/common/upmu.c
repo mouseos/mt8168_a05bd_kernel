@@ -60,7 +60,7 @@ static unsigned int pmic_read_device(unsigned int RegNum,
 
 #if defined(CONFIG_PMIC_HW_ACCESS_EN)
 	unsigned int pmic_reg = 0;
-	unsigned int rdata = 0;
+	unsigned int rdata;
 
 	return_value = pwrap_read((RegNum), &rdata);
 	pmic_reg = rdata;
@@ -90,7 +90,7 @@ static unsigned int pmic_write_device(unsigned int RegNum,
 #if defined(CONFIG_PMIC_HW_ACCESS_EN)
 #ifndef IPIMB
 	unsigned int pmic_reg = 0;
-	unsigned int rdata = 0;
+	unsigned int rdata;
 
 	return_value = pwrap_read((RegNum), &rdata);
 	pmic_reg = rdata;
@@ -519,11 +519,6 @@ void __attribute__ ((weak)) pmic_enable_smart_reset(unsigned char smart_en,
 	unsigned char smart_sdn_en)
 {
 	pr_notice("[%s] smart reset not support!\n", __func__);
-}
-
-void __attribute__ ((weak)) pmic_charger_auto_on(bool bEn)
-{
-	pr_notice("[%s] auto on not support!\n", __func__);
 }
 
 static int pmic_mt_probe(struct platform_device *pdev)

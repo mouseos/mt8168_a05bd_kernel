@@ -108,7 +108,7 @@ enum mmdvfs_log_level {
 #define STEP_UNREQUEST -1
 
 struct mm_freq_step_config {
-	u32 clk_type; /* 0: don't set, 1: clk_mux, 2: pll hopping */
+	u32 clk_type; /* 0: don't set, 1: clk_mux, 2: pll hopping*/
 	struct clk *clk_mux;
 	struct clk *clk_source;
 	u32 clk_mux_id;
@@ -172,6 +172,7 @@ static s32 vopp_steps[MAX_FREQ_STEP];
 static s32 current_max_step = STEP_UNREQUEST;
 static s32 force_step = STEP_UNREQUEST;
 static bool mmdvfs_enable;
+static bool mmdvfs_force_step0;
 static struct pm_qos_request vcore_request;
 static bool mmdvfs_autok_enable;
 static DEFINE_MUTEX(step_mutex);
@@ -316,6 +317,7 @@ static s32 apply_clk_by_type(u32 clk_type, s32 src_mux_id,
 		ret = mm_set_mux_clk(src_mux_id, name, config, step);
 	else if (clk_type == CLK_TYPE_PLL)
 		ret = mm_set_freq_hopping_clk(name, config, step);
+
 	return ret;
 }
 
@@ -1526,6 +1528,7 @@ static int mmdvfs_probe(struct platform_device *pdev)
 #endif
 
 	mmdvfs_enable = true;
+	mmdvfs_force_step0 = false;
 	mmdvfs_autok_enable = true;
 	pm_qos_add_request(&vcore_request, PM_QOS_VCORE_OPP,
 		PM_QOS_VCORE_OPP_DEFAULT_VALUE);
@@ -1575,6 +1578,9 @@ static int mmdvfs_probe(struct platform_device *pdev)
 		mmdvfs_get_limit_step_node(&pdev->dev, mm_freq->prop_name,
 			&mm_freq->limit_config);
 	}
+
+	if (of_property_read_bool(node, "force_step0"))
+		mmdvfs_force_step0 = true;
 
 #if IS_ENABLED(CONFIG_MTK_SMI_EXT)
 	cam_larb_size = 0;
@@ -1724,15 +1730,14 @@ static int __init mmdvfs_pmqos_late_init(void)
 #ifdef QOS_BOUND_DETECT
 	register_qos_notifier(&system_qos.nb);
 #endif
-#ifdef MMDVFS_FORCE_STEP0
-	mmdvfs_qos_force_step(0);
-	mmdvfs_enable = false;
-	pr_notice("force set step0 when late_init\n");
-#else
-	mmdvfs_qos_force_step(0);
-	mmdvfs_qos_force_step(-1);
-	pr_notice("force flip step0 when late_init\n");
-#endif
+	if (mmdvfs_force_step0) {
+		mmdvfs_qos_force_step(0);
+		pr_notice("force set step0 when late_init\n");
+	} else {
+		mmdvfs_qos_force_step(0);
+		mmdvfs_qos_force_step(-1);
+		pr_notice("force flip step0 when late_init\n");
+	}
 	return 0;
 }
 

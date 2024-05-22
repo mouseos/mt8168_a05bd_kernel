@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/ \
-			-I$(srctree)/drivers/misc/mediatek/base/power/include/ \
+subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include
 
 snd-soc-88pm860x-objs := 88pm860x-codec.o
 snd-soc-ab8500-codec-objs := ab8500-codec.o
@@ -123,8 +122,6 @@ snd-soc-rt286-objs := rt286.o
 snd-soc-rt298-objs := rt298.o
 snd-soc-rt5514-objs := rt5514.o
 snd-soc-rt5514-spi-objs := rt5514-spi.o
-snd-soc-rt551x-objs := rt551x.o
-snd-soc-rt551x-spi-objs := rt551x-spi.o
 snd-soc-rt5616-objs := rt5616.o
 snd-soc-rt5631-objs := rt5631.o
 snd-soc-rt5640-objs := rt5640.o
@@ -244,6 +241,7 @@ snd-soc-max9877-objs := max9877.o
 snd-soc-max98504-objs := max98504.o
 snd-soc-tpa6130a2-objs := tpa6130a2.o
 snd-soc-tas2552-objs := tas2552.o
+snd-soc-tas2505-objs := tas2505.o
 
 obj-$(CONFIG_SND_SOC_88PM860X)	+= snd-soc-88pm860x.o
 obj-$(CONFIG_SND_SOC_AB8500_CODEC)	+= snd-soc-ab8500-codec.o
@@ -368,8 +366,6 @@ obj-$(CONFIG_SND_SOC_RT286)	+= snd-soc-rt286.o
 obj-$(CONFIG_SND_SOC_RT298)	+= snd-soc-rt298.o
 obj-$(CONFIG_SND_SOC_RT5514)	+= snd-soc-rt5514.o
 obj-$(CONFIG_SND_SOC_RT5514_SPI)	+= snd-soc-rt5514-spi.o
-obj-$(CONFIG_SND_SOC_RT551X)	+= snd-soc-rt551x.o
-obj-$(CONFIG_SND_SOC_RT551X_SPI)	+= snd-soc-rt551x-spi.o
 obj-$(CONFIG_SND_SOC_RT5616)	+= snd-soc-rt5616.o
 obj-$(CONFIG_SND_SOC_RT5631)	+= snd-soc-rt5631.o
 obj-$(CONFIG_SND_SOC_RT5640)	+= snd-soc-rt5640.o
@@ -401,6 +397,7 @@ obj-$(CONFIG_SND_SOC_STA529)   += snd-soc-sta529.o
 obj-$(CONFIG_SND_SOC_STAC9766)	+= snd-soc-stac9766.o
 obj-$(CONFIG_SND_SOC_STI_SAS)	+= snd-soc-sti-sas.o
 obj-$(CONFIG_SND_SOC_TAS2552)	+= snd-soc-tas2552.o
+obj-$(CONFIG_SND_SOC_TAS2505)	+= snd-soc-tas2505.o
 obj-$(CONFIG_SND_SOC_TAS5086)	+= snd-soc-tas5086.o
 obj-$(CONFIG_SND_SOC_TAS571X)	+= snd-soc-tas571x.o
 obj-$(CONFIG_SND_SOC_TAS5720)	+= snd-soc-tas5720.o

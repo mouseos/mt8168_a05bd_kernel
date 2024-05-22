@@ -141,21 +141,6 @@ unsigned int get_boot_type(void)
 }
 EXPORT_SYMBOL(get_boot_type);
 
-/* for convenience, simply check is charger mode or not */
-bool is_charging_mode(void)
-{
-	if (atomic_read(&g_boot_init) != BM_INITIALIZED) {
-		pr_warn("fail, %s (%d) state(%d,%d)\n", __func__, __LINE__,
-			atomic_read(&g_boot_init), g_boot_mode);
-	}
-
-	if (g_boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT || g_boot_mode == LOW_POWER_OFF_CHARGING_BOOT)
-		return true;
-	else
-		return false;
-}
-EXPORT_SYMBOL(is_charging_mode);
-
 /* for convenience, simply check is meta mode or not */
 bool is_meta_mode(void)
 {

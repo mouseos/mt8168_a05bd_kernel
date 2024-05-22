@@ -37,7 +37,6 @@ extern void rtc_gpio_enable_32k(enum rtc_gpio_user_t user);
 extern void rtc_gpio_disable_32k(enum rtc_gpio_user_t user);
 extern void rtc_mark_recovery(void);
 extern void rtc_mark_kpoc(void);
-extern void rtc_mark_enter_kpoc(void);
 extern void rtc_mark_fast(void);
 extern void rtc_read_pwron_alarm(struct rtc_wkalrm *alm);
 extern int get_rtc_spare_fg_value(void);
@@ -50,7 +49,6 @@ extern bool crystal_exist_status(void);
 #define rtc_gpio_disable_32k(user)	({ 0; })
 #define rtc_mark_recovery()		({ 0; })
 #define rtc_mark_kpoc()			({ 0; })
-#define rtc_mark_enter_kpoc()           ({ 0; })
 #define rtc_mark_fast()			({ 0; })
 #define rtc_read_pwron_alarm(alm)	({ 0; })
 #define get_rtc_spare_fg_value()	({ 0; })
@@ -94,7 +92,8 @@ extern void rtc_disable_abb_32k(void);
 /* NOTE: used in Sleep driver to workaround Vrtc-Vore level shifter issue */
 extern void rtc_enable_writeif(void);
 extern void rtc_disable_writeif(void);
-
+extern void rtc_enable_32k1v8_1(void);
+extern void rtc_disable_32k1v8_1(void);
 extern void rtc_mark_recovery(void);
 extern void rtc_mark_kpoc(void);
 extern void rtc_mark_fast(void);
@@ -108,7 +107,6 @@ extern int set_rtc_spare0_fg_value(int val);
 extern void rtc_irq_handler(void);
 extern bool crystal_exist_status(void);
 extern void mt_power_off(void);
-extern void rtc_mark_sw_lprst(void);
 #else/*ifdef CONFIG_MTK_RTC*/
 #define rtc_read_hw_time()		({ 0; })
 #define rtc_gpio_enable_32k(user)	({ 0; })
@@ -130,7 +128,9 @@ extern void rtc_mark_sw_lprst(void);
 #define set_rtc_spare0_fg_value(val)	({ 0; })
 #define rtc_irq_handler()		({ 0; })
 #define crystal_exist_status()		({ 0; })
-#define rtc_mark_sw_lprst()		({ 0; })
+#define rtc_enable_32k1v8_1()		({ 0; })
+#define rtc_disable_32k1v8_1()		({ 0; })
+
 /* __weak void mt_power_off(void); */
 #endif/*ifdef CONFIG_MTK_RTC*/
 void __attribute__((weak)) rtc_clock_enable(int enable)

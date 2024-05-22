@@ -41,13 +41,11 @@
 
 #define MAX_TABLE 10
 
-#define DTS_BATTERY_NUM_MAX	5
 /* ============================================================ */
 /* power misc related */
 /* ============================================================ */
 #define BAT_VOLTAGE_LOW_BOUND 3400
 #define BAT_VOLTAGE_HIGH_BOUND 3450
-#define H_BATTERY_CV 4400000
 #define LOW_TMP_BAT_VOLTAGE_LOW_BOUND 3200
 #define SHUTDOWN_TIME 40
 #define AVGVBAT_ARRAY_SIZE 30
@@ -223,10 +221,6 @@ enum Fg_kernel_cmds {
 	FG_KERNEL_CMD_UISOC_UPDATE_TYPE,
 	FG_KERNEL_CMD_CHANG_LOGLEVEL,
 	FG_KERNEL_CMD_REQ_ALGO_DATA,
-	FG_KERNEL_CMD_SET_FULL_CV,
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	FG_KERNEL_CMD_USE_AGING_ZCV,
-#endif
 
 	FG_KERNEL_CMD_FROM_USER_NUMBER
 
@@ -278,10 +272,6 @@ struct fgd_nl_msg_t {
 enum Fg_data_type {
 	FUEL_GAUGE_TABLE_CUSTOM_DATA,
 	FGD_CMD_PARAM_T_CUSTOM,
-	FG_LOG_DATA,
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	FG_USE_2ND_ZCV,
-#endif
 
 	FG_DATA_TYPE_NUMBER
 };
@@ -395,7 +385,6 @@ struct fuel_gauge_custom_data {
 	int full_tracking_bat_int2_multiply;
 
 	/* threshold */
-	int rtc_oldsoc_valid_diff;	/* 0.01 % */
 	int hwocv_swocv_diff;	/* 0.1 mv */
 	int hwocv_swocv_diff_lt;	/* 0.1 mv */
 	int hwocv_swocv_diff_lt_temp;	/* degree */
@@ -530,63 +519,6 @@ struct fuel_gauge_custom_data {
 
 };
 
-struct fuel_gauge_log_data {
-	/* index 1 */
-	int	gm30_soc;
-	int	gm30_fg_c_soc;
-	int	gm30_fg_v_soc;
-	int	gm30_ui_soc;
-
-	int	gm30_vc_diff;
-	int	gm30_vc_mode;
-
-	int	gm30_init_vbat;
-
-	int	gm30_t_d0;
-	int	gm30_T_table;
-	int	gm30_T_table_c;
-
-	/* index 11 */
-	int	gm30_fg_c_d0_soc;
-	int	gm30_fg_v_d0_soc;
-
-	int	gm30_quse;
-	int	gm30_quse_wo_lf;
-	int	gm30_quse_tb1;
-	int	gm30_quse_wo_lf_tb1;
-
-	int	gm30_aging_factor;
-	int	gm30_bat_cycle;
-
-	int	gm30_full_tracking_enable;
-	int	gm30_low_tracking_enable;
-	int	gm30_pre_low_tracking_enable;
-
-	/* index 22 */
-	int	gm30_keep_100;
-	int	gm30_re_charging_enable;
-
-	int	gm30_is_charger_exist;
-	int	gm30_soc_100;
-	int	gm30_cv_soc;
-	int	gm30_batterypseudo1;
-	int	gm30_DC_ratio;
-
-	int	gm30_car;
-	int	gm30_car_v;
-
-	/* index 31 */
-	int	gm30_qmax_t_0ma;
-	int	gm30_qmax_t_0ma_tb1;
-
-	int	gm30_full_tracking_bat_int2_lt;
-
-	int	gm30_init_path;
-
-	int	gm30_vboot;
-	int	gm30_vboot_c;
-};
-
 struct FUELGAUGE_TEMPERATURE {
 	signed int BatteryTemp;
 	signed int TemperatureR;
@@ -620,10 +552,6 @@ struct fuel_gauge_table_custom_data {
 	/* cust_battery_meter_table.h */
 	int active_table_number;
 	struct fuel_gauge_table fg_profile[MAX_TABLE];
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	struct fuel_gauge_table fg_profile_temp1[MAX_TABLE];
-	struct fuel_gauge_table fg_profile_temp2[MAX_TABLE];
-#endif
 
 	int temperature_tb0;
 	int fg_profile_temperature_0_size;
@@ -734,20 +662,6 @@ struct mtk_battery {
 
 /*custom related*/
 	int battery_id;
-	int idme_battery_id;
-	bool is_hv_batttery;
-	const char *bat_name[DTS_BATTERY_NUM_MAX];
-	int dts_idme_battery_id[DTS_BATTERY_NUM_MAX];
-	const char *dts_idme_battery_names[DTS_BATTERY_NUM_MAX];
-	struct iio_channel *g_bat_id_iio_channel;
-	unsigned int id_volt_max;
-	unsigned int id_volt_min;
-	int gauge_battery_id_voltage[6];
-	unsigned int total_battery_number;
-	int fake_rtc_soc;
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	int use_aging_zcv;
-#endif
 
 /*simulator log*/
 	struct simulator_log log;
@@ -775,17 +689,6 @@ struct mtk_battery {
 	int ui_soc;
 	int d_saved_car;
 
-	int gm_soc;
-	int fg_c_soc;
-	int fg_v_soc;
-	int vc_mode;	/*0:v mode 1:c mode*/
-	int d0_c;	/*initial capacity by c mode*/
-	int d0_v;	/*initial capacity by v mode*/
-	int vbat_lk;	/*battery voltage under low load at LK-stage*/
-	int dodinit;	/*dod initialization path*/
-	int vboot_v;	/*0% voltage by v mode*/
-	int vboot_c;	/*0% voltage by c moce*/
-
 /*battery flag*/
 	bool init_flag;
 	bool is_probe_done;
@@ -794,8 +697,6 @@ struct mtk_battery {
 	bool disable_mtkbattery;
 	bool cmd_disable_nafg;
 	bool ntc_disable_nafg;
-
-	bool enable_zero_percent_shutdown;
 
 /*battery plug out*/
 	bool disable_plug_int;
@@ -909,12 +810,10 @@ enum {
 	UISOC_ONE_PERCENT,
 	LOW_BAT_VOLT,
 	DLPT_SHUTDOWN,
-	LOW_BATTERY_TEMP,
 	SHUTDOWN_FACTOR_MAX
 };
 
 extern struct mtk_battery gm;
-extern struct fuel_gauge_log_data fg_log_data;
 extern struct battery_data battery_main;
 extern struct fuel_gauge_custom_data fg_cust_data;
 extern struct fuel_gauge_table_custom_data fg_table_cust_data;
@@ -936,10 +835,6 @@ extern int get_shutdown_cond_flag(void);
 /* end mtk_power_misc.c */
 
 /* mtk_battery.c */
-#ifdef CONFIG_MTK_GET_BATTERY_ID_AUXADC
-extern int fguage_get_auxadc_channel(struct platform_device *dev);
-extern bool fg_custom_bat_id_from_dts(struct platform_device *dev);
-#endif
 extern bool is_battery_init_done(void);
 extern int force_get_tbat(bool update);
 extern int bat_get_debug_level(void);
@@ -1005,7 +900,6 @@ extern void set_hw_ocv_unreliable(bool _flag_unreliable);
 extern void mtk_battery_init(struct platform_device *dev);
 extern void mtk_battery_last_init(struct platform_device *dev);
 extern void fg_bat_temp_int_internal(void);
-extern bool get_battery_id_status(void);
 extern void fgauge_get_profile_id(void);
 extern void battery_update(struct battery_data *bat_data);
 extern void fg_custom_init_from_header(void);
@@ -1015,7 +909,6 @@ extern void fg_bat_temp_int_sw_check(void);
 extern void fg_update_sw_low_battery_check(unsigned int thd);
 extern void fg_sw_bat_cycle_accu(void);
 extern void fg_ocv_query_soc(int ocv);
-extern void fg_update_difference_full_cv(unsigned long val);
 
 /* GM3 simulator */
 extern void gm3_log_init(void);
@@ -1030,7 +923,5 @@ extern struct BAT_EC_Struct *get_ec(void);
 int en_intr_VBATON_UNDET(int en);
 int reg_VBATON_UNDET(void (*callback)(void));
 
-/* Report uEvent for bugreport */
-extern int battery_report_uevent(void);
 
 #endif /* __MTK_BATTERY_INTF_H__ */

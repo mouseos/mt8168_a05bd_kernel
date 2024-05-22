@@ -137,7 +137,7 @@ static void return_free_buffers(struct mtk_vcodec_ctx *ctx)
 		src_vb2_v4l2 = NULL;
 		pfrm = NULL;
 		pbs = NULL;
-		memset(&rResult, 0, sizeof(rResult));
+
 		get_free_buffers(ctx, &rResult);
 
 		if (rResult.bs_va != 0) {
@@ -365,9 +365,8 @@ static int vidioc_venc_s_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->param_change |= MTK_ENCODE_PARAM_NONREFP;
 		break;
 	case V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ:
-		mtk_v4l2_debug(2,
-			"V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ: %d",
-			ctrl->val);
+		mtk_v4l2_debug(2, "V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ: %d",
+			       ctrl->val);
 		p->nonrefpfreq = ctrl->val;
 		ctx->param_change |= MTK_ENCODE_PARAM_NONREFPFREQ;
 		break;
@@ -410,11 +409,32 @@ static int vidioc_venc_s_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->param_change |= MTK_ENCODE_PARAM_TSVC;
 		break;
 	case V4L2_CID_MPEG_MTK_ENCODE_ROI_ON:
-		mtk_v4l2_debug(0,
+		mtk_v4l2_debug(2,
 			"V4L2_CID_MPEG_MTK_ENCODE_ROI_ON: %d",
 			ctrl->val);
 		p->roion = ctrl->val;
 		ctx->param_change |= MTK_ENCODE_PARAM_ROI_ON;
+		break;
+	case V4L2_CID_MPEG_MTK_ENCODE_MAX_REFP_NUM:
+		mtk_v4l2_debug(2,
+			"V4L2_CID_MPEG_MTK_ENCODE_MAX_REFP_NUM: %d",
+			ctrl->val);
+		p->maxrefpnum = ctrl->val;
+		ctx->param_change |= MTK_ENCODE_PARAM_MAX_REFP_NUM;
+		break;
+	case V4L2_CID_MPEG_MTK_ENCODE_REFP_DISTANCE:
+		mtk_v4l2_debug(2,
+			"V4L2_CID_MPEG_MTK_ENCODE_REFP_DISTANCE: %d",
+			ctrl->val);
+		p->refpdistance = ctrl->val;
+		ctx->param_change |= MTK_ENCODE_PARAM_REFP_DISTANCE;
+		break;
+	case V4L2_CID_MPEG_MTK_ENCODE_REFP_FRAME_NUM:
+		mtk_v4l2_debug(2,
+			"V4L2_CID_MPEG_MTK_ENCODE_REFP_FRAME_NUM: %d",
+			ctrl->val);
+		p->refpfrmnum = ctrl->val;
+		ctx->param_change |= MTK_ENCODE_PARAM_REFP_FRMNUM;
 		break;
 
 	default:
@@ -434,6 +454,12 @@ static int vidioc_venc_g_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_MTK_ENCODE_ROI_RC_QP:
 		venc_if_get_param(ctx,
 			GET_PARAM_ROI_RC_QP,
+			&value);
+		ctrl->val = value;
+		break;
+	case V4L2_CID_MPEG_MTK_ENCODE_REFP_MAX_FRAME_NUM:
+		venc_if_get_param(ctx,
+			GET_PARAM_REFBUF_FRAME_NUM,
 			&value);
 		ctrl->val = value;
 		break;
@@ -579,6 +605,7 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 	struct v4l2_pix_format_mplane *pix_fmt_mp = &f->fmt.pix_mp;
 	int org_w, org_h, i;
 	__u32 bs_fourcc;
+	__u32 saligned, width_align, height_align;
 	struct mtk_codec_framesizes *spec_size_info = NULL;
 
 	pix_fmt_mp->field = V4L2_FIELD_NONE;
@@ -628,6 +655,23 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 		 * (with MBAFF height align should be 32)
 		 * width height swappable
 		 */
+		if (pix_fmt_mp->pixelformat == V4L2_PIX_FMT_ABGR32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_ARGB32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_RGB32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_BGR32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_BGR24 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_RGB24) {
+			saligned = 4;
+			width_align =
+				spec_size_info->stepwise.step_width;
+			height_align = 1;
+		} else {
+			saligned = 6;
+			width_align =
+				spec_size_info->stepwise.step_width;
+			height_align =
+				spec_size_info->stepwise.step_height;
+		}
 		if (pix_fmt_mp->height > pix_fmt_mp->width) {
 			pix_fmt_mp->height =
 				clamp(pix_fmt_mp->height,
@@ -647,8 +691,8 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 				&pix_fmt_mp->height,
 				spec_size_info->stepwise.min_height,
 				spec_size_info->stepwise.max_width,
-				log2_enc(spec_size_info->stepwise.step_height),
-				6);
+				log2_enc(height_align),
+				saligned);
 
 			if (pix_fmt_mp->width < org_w &&
 			    (pix_fmt_mp->width +
@@ -677,12 +721,12 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 				&pix_fmt_mp->width,
 				spec_size_info->stepwise.min_width,
 				spec_size_info->stepwise.max_width,
-				log2_enc(spec_size_info->stepwise.step_width),
+				log2_enc(width_align),
 				&pix_fmt_mp->height,
 				spec_size_info->stepwise.min_height,
 				spec_size_info->stepwise.max_height,
-				log2_enc(spec_size_info->stepwise.step_height),
-				6);
+				log2_enc(height_align),
+				saligned);
 
 			if (pix_fmt_mp->width < org_w &&
 			    (pix_fmt_mp->width +
@@ -701,11 +745,29 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 		pix_fmt_mp->num_planes = fmt->num_planes;
 
 		if (pix_fmt_mp->num_planes == 1U) {
-			pix_fmt_mp->plane_fmt[0].sizeimage =
+			if (pix_fmt_mp->pixelformat == V4L2_PIX_FMT_ABGR32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_ARGB32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_RGB32 ||
+			pix_fmt_mp->pixelformat == V4L2_PIX_FMT_BGR32) {
+				pix_fmt_mp->plane_fmt[0].sizeimage =
+				    pix_fmt_mp->width * 4 * pix_fmt_mp->height;
+				pix_fmt_mp->plane_fmt[0].bytesperline =
+				    pix_fmt_mp->width * 4;
+			} else if (pix_fmt_mp->pixelformat ==
+					V4L2_PIX_FMT_BGR24 ||
+				 pix_fmt_mp->pixelformat ==
+					V4L2_PIX_FMT_RGB24) {
+				pix_fmt_mp->plane_fmt[0].sizeimage =
+				    pix_fmt_mp->width * 3 * pix_fmt_mp->height;
+				pix_fmt_mp->plane_fmt[0].bytesperline =
+				    pix_fmt_mp->width * 3;
+			} else {
+				pix_fmt_mp->plane_fmt[0].sizeimage =
 				(pix_fmt_mp->width * pix_fmt_mp->height) +
 				(pix_fmt_mp->width * pix_fmt_mp->height) / 2;
-			pix_fmt_mp->plane_fmt[0].bytesperline =
-				pix_fmt_mp->width;
+				pix_fmt_mp->plane_fmt[0].bytesperline =
+					pix_fmt_mp->width;
+			}
 		} else if (pix_fmt_mp->num_planes == 2U) {
 			pix_fmt_mp->plane_fmt[0].sizeimage =
 				pix_fmt_mp->width * pix_fmt_mp->height;
@@ -780,16 +842,16 @@ static void mtk_venc_set_param(struct mtk_vcodec_ctx *ctx,
 		param->input_yuv_fmt = VENC_YUV_FORMAT_24bitBGR888;
 		break;
 	case V4L2_PIX_FMT_ARGB32:
-		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitRGBA8888;
+		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitARGB8888;
 		break;
 	case V4L2_PIX_FMT_ABGR32:
 		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitBGRA8888;
 		break;
 	case V4L2_PIX_FMT_BGR32:
-		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitARGB8888;
+		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitABGR8888;
 		break;
 	case V4L2_PIX_FMT_RGB32:
-		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitABGR8888;
+		param->input_yuv_fmt = VENC_YUV_FORMAT_32bitRGBA8888;
 		break;
 	default:
 		mtk_v4l2_err("Unsupport fourcc =%d", q_data_src->fmt->fourcc);
@@ -814,18 +876,17 @@ static void mtk_venc_set_param(struct mtk_vcodec_ctx *ctx,
 	param->prependheader = enc_params->prependheader;
 	param->bitratemode = enc_params->bitratemode;
 	param->roion = enc_params->roion;
-	param->nonrefp = enc_params->nonrefp;
-	param->nonrefpfreq = enc_params->nonrefpfreq;
+	param->maxrefpnum = enc_params->maxrefpnum;
 	ctx->slowmotion = (enc_params->operationrate >= MTK_SLOWMOTION_GCE_TH);
+	param->nonrefp = enc_params->nonrefp;
 	mtk_v4l2_debug(0,
-	"fmt 0x%x, P/L %d/%d, w/h %d/%d, buf %d/%d, fps/bps %d/%d(%d), gop %d, i_period %d opr %d smvr %d nonrefp %d nonrefpfreq %d",
+	"fmt 0x%x, P/L %d/%d, w/h %d/%d, buf %d/%d, fps/bps %d/%d(%d), gop %d, i_period %d opr %d smvr %d,nonrefp %d",
 	param->input_yuv_fmt, param->profile,
 	param->level, param->width, param->height,
 	param->buf_width, param->buf_height,
 	param->frm_rate, param->bitrate, param->bitratemode,
 	param->gop_size, param->intra_period,
-	param->operationrate, ctx->slowmotion,
-	param->nonrefp, param->nonrefpfreq);
+	param->operationrate, ctx->slowmotion, param->nonrefp);
 }
 static int vidioc_venc_subscribe_evt(struct v4l2_fh *fh,
 	const struct v4l2_event_subscription *sub)
@@ -919,6 +980,7 @@ static int vidioc_venc_s_fmt_cap(struct file *file, void *priv,
 			return -EBUSY;
 		}
 		ctx->state = MTK_STATE_INIT;
+		mtk_v4l2_debug(0, "[%d]ctx->state is %d ", ctx->id, ctx->state);
 	}
 
 	return 0;
@@ -1265,7 +1327,6 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 			return 0;
 		}
 		ctx->enc_flush_buf->lastframe = EOS;
-		//v4l2_m2m_buf_queue_check(ctx->m2m_ctx, &ctx->enc_flush_buf->vb);
 		v4l2_m2m_buf_queue(ctx->m2m_ctx, &ctx->enc_flush_buf->vb);
 		v4l2_m2m_try_schedule(ctx->m2m_ctx);
 		break;
@@ -1371,7 +1432,8 @@ static int vb2ops_venc_buf_prepare(struct vb2_buffer *vb)
 		vb2_v4l2 = container_of(vb, struct vb2_v4l2_buffer, vb2_buf);
 		mtkbuf = container_of(vb2_v4l2, struct mtk_video_enc_buf, vb);
 
-		if (!(mtkbuf->flags & NO_CAHCE_CLEAN)) {
+		if (!(mtkbuf->flags & NO_CAHCE_CLEAN) &&
+			vb->memory == VB2_MEMORY_DMABUF) {
 			struct mtk_vcodec_mem src_mem;
 			struct dma_buf_attachment *buf_att;
 			struct sg_table *sgt;
@@ -1410,7 +1472,8 @@ static void vb2ops_venc_buf_finish(struct vb2_buffer *vb)
 	vb2_v4l2 = container_of(vb, struct vb2_v4l2_buffer, vb2_buf);
 	mtkbuf = container_of(vb2_v4l2, struct mtk_video_enc_buf, vb);
 
-	if (!(mtkbuf->flags & NO_CAHCE_INVALIDATE)) {
+	if (!(mtkbuf->flags & NO_CAHCE_INVALIDATE) &&
+		vb->memory == VB2_MEMORY_DMABUF) {
 		if (vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 			struct mtk_vcodec_mem dst_mem;
 
@@ -1483,7 +1546,7 @@ static int vb2ops_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 		if (!vb2_start_streaming_called(&ctx->m2m_ctx->out_q_ctx.q))
 			return 0;
 	}
-	memset(&param, 0, sizeof(param));
+
 	mtk_venc_set_param(ctx, &param);
 	ret = venc_if_set_param(ctx, VENC_SET_PARAM_ENC, &param);
 	if (ret) {
@@ -1492,28 +1555,6 @@ static int vb2ops_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 		mtk_venc_queue_error_event(ctx);
 		goto err_set_param;
 	}
-
-	if (param.nonrefp != 0) {
-		ret = venc_if_set_param(ctx, VENC_SET_PARAM_NONREFP, &param);
-		if (ret) {
-			mtk_v4l2_err("venc_if_set_param failed=%d", ret);
-			ctx->state = MTK_STATE_ABORT;
-			mtk_venc_queue_error_event(ctx);
-			goto err_set_param;
-		}
-	}
-
-	if (param.nonrefpfreq != 0) {
-		ret = venc_if_set_param(
-				ctx, VENC_SET_PARAM_NONREFPFREQ, &param);
-		if (ret) {
-			mtk_v4l2_err("venc_if_set_param failed=%d", ret);
-			ctx->state = MTK_STATE_ABORT;
-			mtk_venc_queue_error_event(ctx);
-			goto err_set_param;
-		}
-	}
-
 	ctx->param_change = MTK_ENCODE_PARAM_NONE;
 
 	if ((ctx->q_data[MTK_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_H264 ||
@@ -1610,7 +1651,7 @@ static int mtk_venc_encode_header(void *priv)
 	struct vb2_v4l2_buffer *dst_vb2_v4l2, *src_vb2_v4l2;
 	struct mtk_vcodec_mem bs_buf;
 	struct venc_done_result enc_result;
-	memset(&enc_result, 0, sizeof(enc_result));
+
 	dst_buf = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 	if (!dst_buf) {
 		mtk_v4l2_debug(1, "No dst buffer");
@@ -1802,10 +1843,47 @@ static int mtk_venc_param_change(struct mtk_vcodec_ctx *ctx)
 					VENC_SET_PARAM_BITRATE_MODE,
 					&enc_prm);
 	}
+
+	if (!ret &&
+		mtk_buf->param_change & MTK_ENCODE_PARAM_MAX_REFP_NUM) {
+		enc_prm.maxrefpnum = mtk_buf->enc_params.maxrefpnum;
+		mtk_v4l2_debug(1, "[%d] idx=%d, maxrefpdistance=%d",
+				ctx->id,
+				mtk_buf->vb.vb2_buf.index,
+				mtk_buf->enc_params.maxrefpnum);
+		ret |= venc_if_set_param(ctx,
+					VENC_SET_PARAM_MAX_REFP_NUM,
+					&enc_prm);
+	}
+
+	if (!ret &&
+		mtk_buf->param_change & MTK_ENCODE_PARAM_REFP_DISTANCE) {
+		enc_prm.refpdistance = mtk_buf->enc_params.refpdistance;
+		mtk_v4l2_debug(1, "[%d] idx=%d, refpdistance=%d",
+				ctx->id,
+				mtk_buf->vb.vb2_buf.index,
+				mtk_buf->enc_params.refpdistance);
+		ret |= venc_if_set_param(ctx,
+					VENC_SET_PARAM_REFP_DISTANCE,
+					&enc_prm);
+	}
+
+	if (!ret &&
+		mtk_buf->param_change & MTK_ENCODE_PARAM_REFP_FRMNUM) {
+		enc_prm.refpfrmnum = mtk_buf->enc_params.refpfrmnum;
+		mtk_v4l2_debug(1, "[%d] idx=%d, refpfrmnum=%d",
+				ctx->id,
+				mtk_buf->vb.vb2_buf.index,
+				mtk_buf->enc_params.refpfrmnum);
+		ret |= venc_if_set_param(ctx,
+					VENC_SET_PARAM_REFP_FRMNUM,
+					&enc_prm);
+	}
+
 	if (!ret &&
 		mtk_buf->param_change & MTK_ENCODE_PARAM_ROI_ON) {
 		enc_prm.roion = mtk_buf->enc_params.roion;
-		mtk_v4l2_debug(0, "[%d] idx=%d, roion=%d",
+		mtk_v4l2_debug(1, "[%d] idx=%d, roion=%d",
 				ctx->id,
 				mtk_buf->vb.vb2_buf.index,
 				mtk_buf->enc_params.roion);
@@ -1850,7 +1928,6 @@ static void mtk_venc_worker(struct work_struct *work)
 	struct venc_inst *inst = NULL;
 
 	mutex_lock(&ctx->worker_lock);
-	memset(&enc_result, 0, sizeof(enc_result));
 
 	if (ctx->state == MTK_STATE_ABORT) {
 		v4l2_m2m_job_finish(ctx->dev->m2m_dev_enc, ctx->m2m_ctx);
@@ -2239,18 +2316,6 @@ int mtk_vcodec_enc_ctrls_setup(struct mtk_vcodec_ctx *ctx)
 	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
 
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ;
-	cfg.type = V4L2_CTRL_TYPE_INTEGER;
-	cfg.flags = V4L2_CTRL_FLAG_WRITE_ONLY;
-	cfg.name = "Video encode nonrefp";
-	cfg.min = 0;
-	cfg.max = 32;
-	cfg.step = 1;
-	cfg.def = 0;
-	cfg.ops = ops;
-	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
-
-	memset(&cfg, 0, sizeof(cfg));
 	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_DETECTED_FRAMERATE;
 	cfg.type = V4L2_CTRL_TYPE_INTEGER;
 	cfg.flags = V4L2_CTRL_FLAG_WRITE_ONLY;
@@ -2317,6 +2382,66 @@ int mtk_vcodec_enc_ctrls_setup(struct mtk_vcodec_ctx *ctx)
 	cfg.name = "Video encode roi rc qp";
 	cfg.min = 0;
 	cfg.max = 2048;
+	cfg.step = 1;
+	cfg.def = 0;
+	cfg.ops = ops;
+	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ;
+	cfg.type = V4L2_CTRL_TYPE_INTEGER;
+	cfg.flags = V4L2_CTRL_FLAG_WRITE_ONLY;
+	cfg.name = "Video encode nonrefp";
+	cfg.min = 0;
+	cfg.max = 32;
+	cfg.step = 1;
+	cfg.def = 0;
+	cfg.ops = ops;
+	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_REFP_DISTANCE;
+	cfg.type = V4L2_CTRL_TYPE_INTEGER;
+	cfg.flags = V4L2_CTRL_FLAG_WRITE_ONLY;
+	cfg.name = "Video encode refp distance";
+	cfg.min = 0;
+	cfg.max = 14;
+	cfg.step = 1;
+	cfg.def = 0;
+	cfg.ops = ops;
+	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_REFP_FRAME_NUM;
+	cfg.type = V4L2_CTRL_TYPE_INTEGER;
+	cfg.flags = V4L2_CTRL_FLAG_WRITE_ONLY;
+	cfg.name = "Video encode refp frm num";
+	cfg.min = 0;
+	cfg.max = 0x7ffffff;
+	cfg.step = 1;
+	cfg.def = 0x7ffffff;
+	cfg.ops = ops;
+	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_MAX_REFP_NUM;
+	cfg.type = V4L2_CTRL_TYPE_INTEGER;
+	cfg.flags = V4L2_CTRL_FLAG_WRITE_ONLY;
+	cfg.name = "Video encode refp max distance";
+	cfg.min = 0;
+	cfg.max = 16;
+	cfg.step = 1;
+	cfg.def = 0;
+	cfg.ops = ops;
+	ctrl = v4l2_ctrl_new_custom(handler, &cfg, NULL);
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.id = V4L2_CID_MPEG_MTK_ENCODE_REFP_MAX_FRAME_NUM;
+	cfg.type = V4L2_CTRL_TYPE_INTEGER;
+	cfg.flags = V4L2_CTRL_FLAG_VOLATILE;
+	cfg.name = "Video encode refp frame num";
+	cfg.min = 0;
+	cfg.max = 0x7ffffff;
 	cfg.step = 1;
 	cfg.def = 0;
 	cfg.ops = ops;

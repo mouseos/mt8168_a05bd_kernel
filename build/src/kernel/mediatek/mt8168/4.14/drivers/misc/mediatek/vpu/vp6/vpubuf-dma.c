@@ -172,6 +172,8 @@ static struct vpu_kernel_buf *vbuf_dma_kmap(struct vpu_device *vpu_device,
 static void vbuf_dma_kunmap(struct vpu_device *vpu_device,
 				struct vpu_kernel_buf *vkbuf)
 {
+	int ret;
+
 	switch (vkbuf->usage) {
 	case VKBUF_MAP_FPHY_FIOVA:
 	{
@@ -185,8 +187,11 @@ static void vbuf_dma_kunmap(struct vpu_device *vpu_device,
 	}
 	case VKBUF_MAP_FPHY_DIOVA:
 	{
-		dma_unmap_sg(vpu_device->dev, vkbuf->sg.sgl,
-				vkbuf->sg.orig_nents, DMA_BIDIRECTIONAL);
+		ret = m4u_dealloc_mva_sg(0, &(vkbuf->sg), vkbuf->size,
+					 vkbuf->iova_addr);
+		if (ret)
+			LOG_ERR("fail to m4u_dealloc_mva_sg\n");
+
 		sg_free_table(&(vkbuf->sg));
 		break;
 	}

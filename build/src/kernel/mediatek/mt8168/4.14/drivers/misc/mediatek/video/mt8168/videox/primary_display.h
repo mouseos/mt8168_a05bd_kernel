@@ -357,6 +357,8 @@ int primary_display_diagnose(void);
 
 int primary_display_get_info(struct disp_session_info *info);
 int primary_display_capture_framebuffer(unsigned long pbuf);
+int primary_display_capture_framebuffer_ovl(unsigned long pbuf,
+	unsigned int format);
 
 int primary_display_is_video_mode(void);
 int primary_is_sec(void);
@@ -416,9 +418,6 @@ int primary_display_setlcm_cmd(unsigned int *lcm_cmd, unsigned int *lcm_count,
 	unsigned int *lcm_value);
 int primary_display_mipi_clk_change(unsigned int clk_value);
 
-/* for CABC */
-int primary_display_setbacklight_mode(unsigned int mode);
-
 void _cmdq_insert_wait_frame_done_token_mira(void *handle);
 int primary_display_get_max_layer(void);
 long primary_display_wait_state(enum DISP_POWER_STATE state, long timeout);
@@ -477,8 +476,6 @@ int dynamic_debug_msg_print(unsigned int mva, int w, int h, int pitch,
 
 int display_enter_tui(void);
 int display_exit_tui(void);
-
-void primary_backlight_power_off(void);
 
 int primary_display_config_full_roi(struct disp_ddp_path_config *pconfig,
 	disp_path_handle disp_handle,

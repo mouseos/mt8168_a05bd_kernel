@@ -176,7 +176,7 @@ unsigned int mtkfb_query_frm_seq_by_addr(unsigned int session_id,
 bool mtkfb_update_buf_info(unsigned int session_id,	unsigned int layer_id,
 	unsigned int idx, unsigned int mva_offset, unsigned int seq
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
-	, unsigned int secure_handle, unsigned int isSecure, __u8 *layer_enable
+	, unsigned int secure_handle, unsigned int isSecure
 #endif
 );
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT

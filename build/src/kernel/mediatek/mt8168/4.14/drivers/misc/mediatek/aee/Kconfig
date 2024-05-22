@@ -47,17 +47,3 @@ config MTK_AEE_MRDUMP
 	  dump mechanism for debugging system to dump DRAM content at MTK
 	  android phone platform
 
-config AEE_DEBUG_CRASH_NOTES_BYPASS_MRDUMP_CB
-	bool "crash_notes force support"
-	default n
-	help
-	  AEE_DEBUG_CRASH_NOTES_BYPASS_MRDUMP_CB is the kernel config to bypass
-	  getting the mrdump_cb when get the crash_notes in panic flow.
-
-config MTK_AEE_UT
-	tristate "control AED debug file"
-	help
-	  MTK_AEE_UT is the kernel config of aed-debug.c
-	  aed-debug.c is AEE UT test case file, just for generate some vendor
-	  exception to test AEE dump flow, include in KE, HWT, HW_reboot, EE,
-	  and kernelAPI exception

@@ -50,15 +50,11 @@ int disp_lcm_update(struct disp_lcm_handle *plcm,
 int disp_lcm_esd_check(struct disp_lcm_handle *plcm);
 int disp_lcm_esd_recover(struct disp_lcm_handle *plcm);
 int disp_lcm_suspend(struct disp_lcm_handle *plcm);
-int disp_lcm_suspend_power(struct disp_lcm_handle *plcm);
 int disp_lcm_resume(struct disp_lcm_handle *plcm);
-int disp_lcm_resume_power(struct disp_lcm_handle *plcm);
 int disp_lcm_is_support_adjust_fps(struct disp_lcm_handle *plcm);
 int disp_lcm_adjust_fps(void *cmdq, struct disp_lcm_handle *plcm, int fps);
 int disp_lcm_set_backlight(struct disp_lcm_handle *plcm,
 	void *handle, int level);
-int disp_lcm_set_backlight_power_off(struct disp_lcm_handle *plcm);
-int disp_lcm_set_backlight_mode(struct disp_lcm_handle *plcm, int mode);
 int disp_lcm_read_fb(struct disp_lcm_handle *plcm);
 int disp_lcm_ioctl(struct disp_lcm_handle *plcm, enum LCM_IOCTL ioctl,
 	unsigned int arg);

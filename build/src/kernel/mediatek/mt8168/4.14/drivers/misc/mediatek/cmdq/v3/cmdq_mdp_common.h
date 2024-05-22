@@ -138,8 +138,6 @@ struct mdp_pmqos_record {
 #define MDP_THREAD_START CMDQ_DYNAMIC_THREAD_ID_START
 #endif
 
-#define MTK_CMDQ_PMQOS
-
 /* MDP common kernel logic */
 
 void cmdq_mdp_fix_command_scenario_for_user_space(
@@ -186,6 +184,8 @@ struct mdp_submit;
 s32 cmdq_mdp_update_sec_addr_index(struct cmdqRecStruct *handle,
 	u32 sec_handle, u32 index, u32 instr_index);
 u32 cmdq_mdp_handle_get_instr_count(struct cmdqRecStruct *handle);
+void cmdq_mdp_meta_replace_sec_addr(struct op_meta *metas,
+	struct mdp_submit *user_job, struct cmdqRecStruct *handle);
 
 /* Platform dependent function */
 
@@ -244,7 +244,6 @@ void testcase_clkmgr_mdp(void);
 
 u32 cmdq_mdp_get_hw_reg(enum MDP_ENG_BASE base, u16 offset);
 u32 cmdq_mdp_get_hw_port(enum MDP_ENG_BASE base);
-
 /* Platform virtual function setting */
 void cmdq_mdp_platform_function_setting(void);
 

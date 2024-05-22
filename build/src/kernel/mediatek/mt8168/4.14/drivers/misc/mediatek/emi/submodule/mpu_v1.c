@@ -177,8 +177,9 @@ static void check_violation(void)
 	else if (wr_oo_vio == 2)
 		pr_info("[MPU] read out-of-range violation\n");
 
-#if 0 //def CONFIG_MTK_AEE_FEATURE
-	if (wr_vio != 0) {
+#ifdef CONFIG_MTK_AEE_FEATURE
+	if (wr_vio == 1) {
+#if 0
 		if (is_md_master(master_id)) {
 			char str[CCCI_STR_MAX_LEN] = "0";
 
@@ -192,7 +193,7 @@ static void check_violation(void)
 			pr_info("str=%s strlen(str)=%d\n",
 				str, (int)strlen(str));
 		}
-
+#endif
 		aee_kernel_exception("EMI MPU",
 			"%s%s = 0x%x,%s = 0x%x,%s = 0x%x,%s = 0x%llx\n%s%s\n",
 			"EMI MPU violation.\n",
@@ -207,13 +208,11 @@ static void check_violation(void)
 
 	clear_violation();
 }
-
 static irqreturn_t violation_irq(int irq, void *dev_id)
 {
 	check_violation_cb();
 	return IRQ_HANDLED;
 }
-
 int emi_mpu_set_protection(struct emi_region_info_t *region_info)
 {
 	unsigned int start, end;
@@ -330,11 +329,10 @@ static ssize_t mpu_config_store
 	char *ptr;
 	char *token[EMI_MPU_MAX_TOKEN];
 	static struct emi_region_info_t region_info;
-	unsigned long long start = 0;
-	unsigned long long end = 0;
-	unsigned long region = 0;
-	unsigned long dgroup = 0;
-	unsigned long apc = 0;
+	unsigned long long start, end;
+	unsigned long region;
+	unsigned long dgroup;
+	unsigned long apc;
 	int i, ret;
 
 	if ((strlen(buf) + 1) > EMI_MPU_MAX_CMD_LEN) {
@@ -446,7 +444,6 @@ static void protect_ap_region(void)
 	region_info.end = (unsigned long long)memblock_end_of_DRAM() - 1;
 	region_info.region = AP_REGION_ID;
 	set_ap_region_permission(region_info.apc);
-
 	emi_mpu_set_protection(&region_info);
 }
 #endif
@@ -463,6 +460,24 @@ static void enable_slverr(void)
 	}
 }
 #endif
+
+static void protect_kernel_ro_region(void)
+{
+	struct emi_region_info_t region_info;
+
+	region_info.start = (unsigned long long)
+				__virt_to_phys_nodebug((unsigned long)_stext);
+	region_info.end = (unsigned long long)
+				__virt_to_phys_nodebug((unsigned long)_etext)
+				- 1;
+	pr_info("Protect kernel RO start: %p (%lx) end: %p (%lx)\n", _stext,
+		(unsigned long)__virt_to_phys_nodebug((unsigned long)_stext),
+		_etext,
+		(unsigned long)__virt_to_phys_nodebug((unsigned long)_etext));
+	region_info.region = AP_REGION_ID - 1;
+	set_ap_region_permission(region_info.apc);
+	emi_mpu_set_protection(&region_info);
+}
 
 void mpu_init(struct platform_driver *emi_ctrl, struct platform_device *pdev)
 {
@@ -501,7 +516,6 @@ void mpu_init(struct platform_driver *emi_ctrl, struct platform_device *pdev)
 			return;
 		}
 	}
-
 #if ENABLE_AP_REGION
 	protect_ap_region();
 #endif
@@ -509,7 +523,7 @@ void mpu_init(struct platform_driver *emi_ctrl, struct platform_device *pdev)
 #ifdef ENABLE_MPU_SLVERR
 	enable_slverr();
 #endif
-
+	protect_kernel_ro_region();
 #if !defined(USER_BUILD_KERNEL)
 	ret = driver_create_file(&emi_ctrl->driver, &driver_attr_mpu_config);
 	if (ret)

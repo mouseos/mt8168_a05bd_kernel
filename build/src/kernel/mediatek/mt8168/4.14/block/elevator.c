@@ -253,7 +253,7 @@ int elevator_init(struct request_queue *q, char *name)
 }
 EXPORT_SYMBOL(elevator_init);
 
-void __elevator_exit(struct request_queue *q, struct elevator_queue *e)
+void elevator_exit(struct request_queue *q, struct elevator_queue *e)
 {
 	mutex_lock(&e->sysfs_lock);
 	if (e->uses_mq && e->type->ops.mq.exit_sched)

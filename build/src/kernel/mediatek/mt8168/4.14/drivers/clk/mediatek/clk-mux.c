@@ -107,7 +107,7 @@ static u8 mtk_mux_get_parent(struct clk_hw *hw)
 	struct mtk_clk_mux *mux = to_mtk_clk_mux(hw);
 	int num_parents = clk_hw_get_num_parents(hw);
 	u32 mask = GENMASK(mux->mux_width - 1, 0);
-	u32 val = 0;
+	u32 val;
 
 	regmap_read(mux->regmap, mux->mux_ofs, &val);
 	val = (val >> mux->mux_shift) & mask;

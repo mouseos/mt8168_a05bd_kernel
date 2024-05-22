@@ -27,8 +27,3 @@ endif
 obj-$(CONFIG_MTK_CHARGER)	+= charger/
 
 obj-y += misc/
-obj-y += wpc/
-obj-y += fusb/
-obj-y += amzn_ld/
-obj-y += pubadc_manage/
-obj-y += max20342/

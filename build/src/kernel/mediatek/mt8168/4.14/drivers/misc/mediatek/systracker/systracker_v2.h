@@ -187,6 +187,6 @@ extern void consys_print
 	(unsigned long long time_stamp, unsigned int cpu, unsigned int t);
 
 extern int MTKPowerStatus(void);
-//#define SYSTRACKER_TEST_SUIT 1 /* enable for driver poring test suit */
+#define SYSTRACKER_TEST_SUIT 1 /* enable for driver poring test suit */
 /* #define TRACKER_DEBUG 0 */
 #endif

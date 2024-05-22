@@ -100,6 +100,7 @@ static cm_mgr_value_handler_t cm_mgr_loading_dbg_handler;
 static cm_mgr_value_handler_t cm_mgr_ratio_dbg_handler;
 static cm_mgr_value_handler_t cm_mgr_bw_dbg_handler;
 static cm_mgr_value_handler_t cm_mgr_valid_dbg_handler;
+static int cm_mgr_dram_type_pcddr;
 
 #define CM_MGR_MET_REG_FN_VALUE(name)				\
 	void cm_mgr_register_##name(cm_mgr_value_handler_t handler)	\
@@ -263,6 +264,11 @@ static int cm_mgr_check_dram_type(void)
 		cm_mgr_idx = CM_MGR_LP4X_2CH_3200;
 	else if (ddr_type == TYPE_LPDDR3)
 		cm_mgr_idx = CM_MGR_LP3_1CH_1866;
+	else {
+		cm_mgr_enable = 0;
+		cm_mgr_dram_type_pcddr = 1;
+	}
+
 	cm_platform_dprintk("#@# %s(%d) ddr_type 0x%x, ddr_hz %d, idx 0x%x\n",
 				__func__, __LINE__, ddr_type, ddr_hz,
 				cm_mgr_idx);
@@ -623,6 +629,17 @@ void cm_mgr_ratio_timer_en(int enable)
 	} else {
 		del_timer(&cm_mgr_ratio_timer);
 	}
+}
+
+bool is_8168_dram_type_pcddr(void)
+{
+	if (cm_mgr_dram_type_pcddr) {
+		cm_platform_dprintk("CM manager do not support PCDDR!\n");
+		cm_platform_dprintk("%s get_ddr_type() = %d\n",
+				     __func__, get_ddr_type());
+		return true;
+	} else
+		return false;
 }
 
 static struct pm_qos_request ddr_opp_req;

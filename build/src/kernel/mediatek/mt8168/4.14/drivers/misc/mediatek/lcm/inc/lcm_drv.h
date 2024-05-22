@@ -22,11 +22,6 @@
 #define ARY_SIZE(x) (sizeof((x)) / sizeof((x[0])))
 #endif
 
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-#include <linux/metricslog.h>
-#define METRICS_STR_LEN  512
-#endif
-
 /* ------------------------------------------------------------------------- */
 
 /* common enumerations */
@@ -37,16 +32,6 @@ enum LCM_TYPE {
 	LCM_TYPE_DSI
 };
 
-
-/* CABC Start */
-typedef enum {
-	CABC_OFF	= 0,
-	CABC_UI		= 1,
-	CABC_STILL	= 2,
-	CABC_MOVIE	= 3,
-	CABC_MAX	= 4,
-} E_CABC_MODE;
-/* CABC end */
 
 enum LCM_CTRL {
 	LCM_CTRL_NONE = 0,
@@ -808,14 +793,6 @@ struct LCM_setting_table_V3 {
 	unsigned char para_list[128];
 };
 
-struct LCM_setting_table_V4 {
-	unsigned char id;
-	unsigned char cmd;
-	unsigned char count;
-	unsigned char para_list[128];
-	unsigned int flag;
-};
-
 /*
  * dtype	---- data type
  * vc		---- virtual channel
@@ -845,10 +822,6 @@ struct LCM_UTIL_FUNCS {
 	void (*send_data)(unsigned int data);
 	unsigned int (*read_data)(void);
 
-	void (*dsi_set_cmdq_V4)(struct LCM_setting_table_V4 *para_list,
-				unsigned int size, unsigned char force_update);
-	int (*dsi_get_cmdq_V4)(struct LCM_setting_table_V4 *para_list,
-				unsigned int size, unsigned char force_update);
 	void (*dsi_set_cmdq_V3)(struct LCM_setting_table_V3 *para_list,
 			unsigned int size, unsigned char force_update);
 	void (*dsi_set_cmdq_V2)(unsigned int cmd, unsigned char count,
@@ -902,7 +875,6 @@ struct LCM_DRIVER {
 	void (*init_power)(void);
 	void (*suspend_power)(void);
 	void (*resume_power)(void);
-	void (*set_backlight_power_off)(void);
 
 	void (*update)(unsigned int x, unsigned int y, unsigned int width,
 			unsigned int height);

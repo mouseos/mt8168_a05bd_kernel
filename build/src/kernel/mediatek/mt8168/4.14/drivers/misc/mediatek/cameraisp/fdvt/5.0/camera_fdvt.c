@@ -2617,11 +2617,6 @@ static long FDVT_ioctl(struct file *pFile,
 					Ret = -EFAULT;
 					goto EXIT;
 				}
-				if (fdvt_FdvtReq.m_pFdvtConfig == NULL) {
-					log_err("NULL pointer:fdvt_FdvtReq.m_pFdvtConfig");
-					Ret = -EFAULT;
-					goto EXIT;
-				}
 				if (copy_from_user
 				    (g_FdvtEnqueReq_Struct.FdvtFrameConfig,
 				     (void *)fdvt_FdvtReq.m_pFdvtConfig,

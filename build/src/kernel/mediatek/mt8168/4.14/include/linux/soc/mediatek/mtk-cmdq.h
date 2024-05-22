@@ -196,6 +196,8 @@ void cmdq_pkt_free_buf(struct cmdq_pkt *pkt);
 
 s32 cmdq_pkt_add_cmd_buffer(struct cmdq_pkt *pkt);
 
+s32 cmdq_pkt_copy_cmd_buf(struct cmdq_pkt *pkt, void *src, const u32 size);
+
 /**
  * cmdq_mbox_destroy() - destroy CMDQ mailbox client and channel
  * @client:	the CMDQ mailbox client
@@ -247,6 +249,12 @@ s32 cmdq_pkt_write_reg_addr(struct cmdq_pkt *pkt, dma_addr_t addr,
 
 s32 cmdq_pkt_write_value_addr(struct cmdq_pkt *pkt, dma_addr_t addr,
 	u32 value, u32 mask);
+
+s32 cmdq_pkt_store_value(struct cmdq_pkt *pkt, u16 indirect_dst_reg_idx,
+	u16 dst_addr_low, u32 value, u32 mask);
+
+s32 cmdq_pkt_store_value_reg(struct cmdq_pkt *pkt, u16 indirect_dst_reg_idx,
+	u16 dst_addr_low, u16 indirect_src_reg_idx, u32 mask);
 
 s32 cmdq_pkt_write_indriect(struct cmdq_pkt *pkt, struct cmdq_base *clt_base,
 	dma_addr_t addr, u16 src_reg_idx, u32 mask);

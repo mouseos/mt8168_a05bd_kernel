@@ -347,47 +347,37 @@ int disp_allocate_mva(struct m4u_client_t *client, enum DISP_MODULE_ENUM module,
 int disp_hal_allocate_framebuffer(phys_addr_t pa_start, phys_addr_t pa_end,
 				  unsigned long *va, unsigned long *mva)
 {
-#ifdef CONFIG_MTK_M4U
-	int ret = 0;
+	void *fb_va = NULL;
 
-	*va = (unsigned long)ioremap_nocache(pa_start, pa_end - pa_start + 1);
-	pr_info("disphal_allocate_fb, pa_start=0x%pa, pa_end=0x%pa, va=0x%lx\n",
-		&pa_start, &pa_end, *va);
+	fb_va = ioremap_nocache(pa_start, pa_end - pa_start + 1);
+	if (fb_va == NULL) {
+#ifdef CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE
+		pr_info("framebuffer may mapping, try vmap\n");
+		if (PageHighMem(pfn_to_page(pa_start >> PAGE_SHIFT))) {
+			int i = 0;
+			int npages = PAGE_ALIGN(pa_end - pa_start)/PAGE_SIZE;
+			struct page **pages =
+				vmalloc(sizeof(struct page *) * npages);
+			pgprot_t pgprot = pgprot_noncached(PAGE_KERNEL);
+			phys_addr_t addr;
 
-	if (disp_helper_get_option(DISP_OPT_USE_M4U)) {
-		struct m4u_client_t *client;
-
-		struct sg_table *sg_table = &table;
-
-		sg_alloc_table(sg_table, 1, GFP_KERNEL);
-
-		sg_dma_address(sg_table->sgl) = pa_start;
-		sg_dma_len(sg_table->sgl) = (pa_end - pa_start + 1);
-		client = m4u_create_client();
-		if (IS_ERR_OR_NULL(client))
-			DISPERR("create client fail!\n");
-
-		*mva = pa_start & 0xffffffffULL;
-		ret = m4u_alloc_mva(client, DISP_M4U_PORT_DISP_OVL0, 0,
-			sg_table, (pa_end - pa_start + 1),
-		    M4U_PROT_READ | M4U_PROT_WRITE, 0, (unsigned int *)mva);
-		if (ret)
-			DISPERR("m4u_alloc_mva returns fail: %d\n", ret);
-
-		DISPINFO("[DISPHAL] FB MVA is 0x%lx PA is 0x%pa\n",
-			*mva, &pa_start);
-	} else {
-		*mva = pa_start & 0xffffffffULL;
-	}
-#else
-#ifdef FREE_FB_BUFFER
-	*va = (unsigned long)__va(pa_start);
-#else
-	*va = (unsigned long)ioremap_nocache(pa_start, pa_end - pa_start + 1);
+			pr_info("framebuffer at high zone\n");
+			for (i = 0; i < npages; i++) {
+				addr = pa_start + (i * PAGE_SIZE);
+				pages[i] = pfn_to_page(addr >> PAGE_SHIFT);
+			}
+			fb_va = vmap(pages, npages, VM_MAP, pgprot);
+			vfree(pages);
+		} else
 #endif
+		{
+			pr_info("framebuffer at low zone\n");
+			fb_va = __va(pa_start);
+		}
+	}
+	*va = (unsigned long)fb_va;
 	*mva = pa_start & 0xffffffffULL;
 	pr_info("disphal_allocate_fb, pa=%pa, va=0x%lx mva=0x%lx\n",
 		&pa_start, *va, *mva);
-#endif
 	return 0;
 }

@@ -27,6 +27,7 @@ enum mixer_control_func {
 	CTRL_SINEGEN_LOOPBACK_MODE = 0,
 	CTRL_SINEGEN_TIMING,
 	CTRL_AP_LOOPBACK,
+	CTRL_DMIC_MODE,
 };
 
 enum sinegen_in_out_sel {
@@ -155,6 +156,13 @@ static const char *const ap_loopback_func[] = {
 	ENUM_TO_STR(AP_LOOPBACK_DUAL_AMIC_TO_HP),
 };
 
+static const char *const dmic_mode_func[] = {
+	ENUM_TO_STR(DMIC_MODE_3P25M),
+	ENUM_TO_STR(DMIC_MODE_1P625M),
+	ENUM_TO_STR(DMIC_MODE_812P5K),
+	ENUM_TO_STR(DMIC_MODE_406P25K),
+};
+
 static const struct soc_enum mt8168_afe_soc_enums[] = {
 	[CTRL_SINEGEN_LOOPBACK_MODE] =
 		SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(sinegen_loopback_mode_func),
@@ -164,8 +172,71 @@ static const struct soc_enum mt8168_afe_soc_enums[] = {
 				    sinegen_timing_func),
 	[CTRL_AP_LOOPBACK] = SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(ap_loopback_func),
 					ap_loopback_func),
-
+	[CTRL_DMIC_MODE] = SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(dmic_mode_func),
+					dmic_mode_func),
 };
+
+static int mt8168_afe_hw_gain1_vol_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_soc_kcontrol_platform(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(platform);
+	unsigned int val;
+
+	mt8168_afe_enable_main_clk(afe);
+	regmap_read(afe->regmap, AFE_GAIN1_CON1, &val);
+	mt8168_afe_disable_main_clk(afe);
+	ucontrol->value.integer.value[0] = val & AFE_GAIN1_CON1_MASK;
+
+	return 0;
+}
+
+static int mt8168_afe_hw_gain1_vol_put(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_soc_kcontrol_platform(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(platform);
+	unsigned int val;
+
+	val = ucontrol->value.integer.value[0];
+	mt8168_afe_enable_main_clk(afe);
+	regmap_update_bits(afe->regmap, AFE_GAIN1_CON1,
+		AFE_GAIN1_CON1_MASK, val);
+	mt8168_afe_disable_main_clk(afe);
+	return 0;
+}
+
+static int mt8168_afe_hw_gain1_sampleperstep_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_soc_kcontrol_platform(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(platform);
+	unsigned int val;
+
+	mt8168_afe_enable_main_clk(afe);
+	regmap_read(afe->regmap, AFE_GAIN1_CON0, &val);
+	mt8168_afe_disable_main_clk(afe);
+
+	val = (val & AFE_GAIN1_CON0_SAMPLE_PER_STEP_MASK) >> 8;
+	ucontrol->value.integer.value[0] = val;
+
+	return 0;
+}
+
+static int mt8168_afe_hw_gain1_sampleperstep_put(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_soc_kcontrol_platform(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(platform);
+	unsigned int val;
+
+	val = ucontrol->value.integer.value[0];
+	mt8168_afe_enable_main_clk(afe);
+	regmap_update_bits(afe->regmap, AFE_GAIN1_CON0,
+		AFE_GAIN1_CON0_SAMPLE_PER_STEP_MASK, val << 8);
+	mt8168_afe_disable_main_clk(afe);
+	return 0;
+}
 
 static int mt8168_afe_cm_bypass_get(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
@@ -197,19 +268,6 @@ static int mt8168_afe_cm_bypass_put(struct snd_kcontrol *kcontrol,
 	else if (!strcmp(kcontrol->id.name, "CM2_Bypass_Switch"))
 		data->bypass_cm2 = (ucontrol->value.integer.value[0]) ?
 				   true : false;
-
-	return 0;
-}
-
-static int mt8168_afe_dl_playback_state_get(struct snd_kcontrol *kcontrol,
-					    struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_platform *plat = snd_soc_kcontrol_platform(kcontrol);
-	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(plat);
-	struct mt8168_afe_private *afe_priv = afe->platform_priv;
-	struct mt8168_control_data *data = &afe_priv->ctrl_data;
-
-	ucontrol->value.integer.value[0] = data->dl_p_state;
 
 	return 0;
 }
@@ -271,7 +329,7 @@ static int mt8168_afe_sinegen_loopback_mode_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_platform *plat = snd_soc_kcontrol_platform(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(plat);
 	unsigned int mode;
-	unsigned int val = 0;
+	unsigned int val;
 	unsigned int in_out_sel;
 
 	mt8168_afe_enable_main_clk(afe);
@@ -351,7 +409,7 @@ static int mt8168_afe_sinegen_timing_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_platform *plat = snd_soc_kcontrol_platform(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(plat);
 	unsigned int timing;
-	unsigned int val = 0;
+	unsigned int val;
 
 	mt8168_afe_enable_main_clk(afe);
 
@@ -536,7 +594,7 @@ static int mt8168_afe_ap_loopback_put(struct snd_kcontrol *kcontrol,
 		regmap_update_bits(afe->regmap,
 					   AFE_AUD_PAD_TOP, 0xffffffff, 0x30);
 		regmap_update_bits(afe->regmap, AFE_ADDA_UL_SRC_CON0, 0x1, 0x0);
-		/* de suggest diable ADDA_UL_SRC at least wait 125us */
+		/* de suggest disable ADDA_UL_SRC at least wait 125us */
 		udelay(150);
 		regmap_update_bits(afe->regmap, AFE_ADDA_UL_DL_CON0, 0x1, 0x0);
 
@@ -629,44 +687,37 @@ static int mt8168_afe_ap_loopback_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-enum mt8168_afe_volume_key_switch {
-	VOLKEY_NORMAL = 0,
-	VOLKEY_SWAP
-};
-
-static const char *const mt8168_afe_volume_key_switch[] = { "VOLKEY_NORMAL", "VOLKEY_SWAP" };
-
-extern void set_kpd_swap_vol_key(bool flag);
-extern bool get_kpd_swap_vol_key(void);
-
-static int mt8168_afe_volkey_switch_get(
-				struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
+static int mt8168_afe_dmic_mode_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
 {
-	if (get_kpd_swap_vol_key())
-		ucontrol->value.integer.value[0] = VOLKEY_SWAP;
-	else
-		ucontrol->value.integer.value[0] = VOLKEY_NORMAL;
+	struct snd_soc_platform *platform = snd_soc_kcontrol_platform(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(platform);
+	struct mt8168_afe_private *afe_priv = afe->platform_priv;
+	struct mt8168_dmic_data *dmic_data = &afe_priv->dmic_data;
+
+	ucontrol->value.integer.value[0] = dmic_data->dmic_mode;
+
 	return 0;
 }
 
-static int mt8168_afe_volkey_switch_set(
-				struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
+static int mt8168_afe_dmic_mode_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
 {
-	if (ucontrol->value.integer.value[0] == VOLKEY_NORMAL)
-		set_kpd_swap_vol_key(false);
-	else
-		set_kpd_swap_vol_key(true);
+	struct snd_soc_platform *platform = snd_soc_kcontrol_platform(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(platform);
+	struct mt8168_afe_private *afe_priv = afe->platform_priv;
+	struct mt8168_dmic_data *dmic_data = &afe_priv->dmic_data;
+
+	unsigned int val = ucontrol->value.integer.value[0];
+
+	if (dmic_data->dmic_mode == val)
+		return 0;
+
+	dmic_data->dmic_mode = ucontrol->value.integer.value[0];
+
 	return 0;
 }
 
-static const struct soc_enum mt8168_afe_volkey_control_enum[] = {
-	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mt8168_afe_volume_key_switch),
-		mt8168_afe_volume_key_switch),
-};
-#endif
 
 static const struct snd_kcontrol_new mt8168_afe_controls[] = {
 	SOC_SINGLE_BOOL_EXT("CM1_Bypass_Switch",
@@ -693,15 +744,24 @@ static const struct snd_kcontrol_new mt8168_afe_controls[] = {
 			 mt8168_afe_soc_enums[CTRL_AP_LOOPBACK],
 			 mt8168_afe_ap_loopback_get,
 			 mt8168_afe_ap_loopback_put),
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-	SOC_ENUM_EXT("VOLKEY_SWITCH", mt8168_afe_volkey_control_enum[0],
-			mt8168_afe_volkey_switch_get,
-			mt8168_afe_volkey_switch_set),
-#endif
-	SOC_SINGLE_BOOL_EXT("DL_Playback_State",
-			0,
-			mt8168_afe_dl_playback_state_get,
-			NULL),
+	SOC_SINGLE_EXT("HW Gain1 Volume",
+				0,
+				0,
+				0x80000,
+				0,
+				mt8168_afe_hw_gain1_vol_get,
+				mt8168_afe_hw_gain1_vol_put),
+	SOC_SINGLE_EXT("HW Gain1 SamplePerStep",
+				0,
+				0,
+				255,
+				0,
+				mt8168_afe_hw_gain1_sampleperstep_get,
+				mt8168_afe_hw_gain1_sampleperstep_put),
+	SOC_ENUM_EXT("DMIC_Mode_Select",
+			 mt8168_afe_soc_enums[CTRL_DMIC_MODE],
+			 mt8168_afe_dmic_mode_get,
+			 mt8168_afe_dmic_mode_put),
 };
 
 int mt8168_afe_add_controls(struct snd_soc_platform *platform)

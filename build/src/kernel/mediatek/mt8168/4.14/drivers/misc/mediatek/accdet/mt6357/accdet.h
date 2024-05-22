@@ -79,12 +79,6 @@ enum accdet_status {
 	STAND_BY = 5
 };
 
-enum audio_jack_type {
-	TYPE_UNKNOWN = 0,
-	TYPE_CTIA = 1,
-	TYPE_OMTP = 2
-};
-
 struct three_key_threshold {
 	unsigned int mid;
 	unsigned int up;

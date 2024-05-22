@@ -62,12 +62,9 @@
 #include <linux/suspend.h>
 
 #include <mt-plat/mtk_boot.h>
-#include <mt-plat/charger_class.h>
-#include <mt-plat/battery_metrics.h>
 /* #include <musb_core.h> */ /* FIXME */
 #include "mtk_charger_intf.h"
 #include "mtk_switch_charging.h"
-#include "mtk_battery_internal.h"
 
 static int _uA_to_mA(int uA)
 {
@@ -99,159 +96,21 @@ static void _disable_all_charging(struct charger_manager *info)
 	}
 }
 
-#define DETECTION_MIVR_UV 4400000
-static int adapter_power_detection_by_ocp(struct charger_manager *info)
-{
-	struct charger_data *pdata = &info->chg1_data;
-	int bak_cv_uv = 0, bak_iusb_ua = 0, bak_ichg_ua = 0, bak_mivr = 0;
-	int cv_uv = info->data.battery_cv;
-	int iusb_ua = info->power_detection.aicl_trigger_iusb;
-	int ichg_ua = info->power_detection.aicl_trigger_ichg;
-
-	/* Backup IUSB/ICHG/CV setting */
-	charger_dev_get_constant_voltage(info->chg1_dev, &bak_cv_uv);
-	charger_dev_get_input_current(info->chg1_dev, &bak_iusb_ua);
-	charger_dev_get_charging_current(info->chg1_dev, &bak_ichg_ua);
-	charger_dev_get_mivr(info->chg1_dev, &bak_mivr);
-	pr_info("%s: backup IUSB[%d] ICHG[%d] CV[%d] MIVR[%d]\n",
-			__func__, _uA_to_mA(bak_iusb_ua),
-			_uA_to_mA(bak_ichg_ua), bak_cv_uv, bak_mivr);
-
-	/* set higher setting to draw more power */
-	pr_info("%s: set IUSB[%d] ICHG[%d] CV[%d] MIVR[%d] for detection\n",
-			__func__, _uA_to_mA(iusb_ua), _uA_to_mA(ichg_ua),
-			cv_uv, DETECTION_MIVR_UV);
-	charger_dev_set_mivr(info->chg1_dev, DETECTION_MIVR_UV);
-	charger_dev_set_constant_voltage(info->chg1_dev, cv_uv);
-	charger_dev_set_input_current(info->chg1_dev, iusb_ua);
-	charger_dev_set_charging_current(info->chg1_dev, ichg_ua);
-	charger_dev_dump_registers(info->chg1_dev);
-
-	/* Run AICL */
-	msleep(50);
-	charger_dev_run_aicl(info->chg1_dev,
-			&pdata->input_current_limit_by_aicl);
-	pr_info("%s: aicl result: %d mA\n", __func__,
-			_uA_to_mA(pdata->input_current_limit_by_aicl));
-
-	/* Restore IUB/ICHG/CV setting */
-	pr_info("%s: restore IUSB[%d] ICHG[%d] CV[%d] MIVR[%d]\n",
-			__func__, _uA_to_mA(bak_iusb_ua),
-			_uA_to_mA(bak_ichg_ua), bak_cv_uv, bak_mivr);
-	charger_dev_set_mivr(info->chg1_dev, bak_mivr);
-	charger_dev_set_constant_voltage(info->chg1_dev, bak_cv_uv);
-	charger_dev_set_input_current(info->chg1_dev, bak_iusb_ua);
-	charger_dev_set_charging_current(info->chg1_dev, bak_ichg_ua);
-	charger_dev_dump_registers(info->chg1_dev);
-
-	return pdata->input_current_limit_by_aicl;
-}
-
-static int adapter_power_detection(struct charger_manager *info)
-{
-	struct charger_data *pdata = &info->chg1_data;
-	struct power_detection_data *det = &info->power_detection;
-	int chr_type = info->chr_type;
-	int aicl_ua = 0, rp_curr_ma;
-	static const char * const category_text[] = {
-		"5W", "7.5W", "9W", "12W", "15W"
-	};
-
-	if (!det->en)
-		return 0;
-
-	if (det->iusb_ua)
-		goto skip;
-
-	/* Step 1: Determine Type-C adapter by Rp */
-	rp_curr_ma = tcpm_inquire_typec_remote_rp_curr(info->tcpc);
-	if (rp_curr_ma == 3000) {
-		pdata->input_current_limit = 3000000;
-		det->iusb_ua = 3000000;
-		det->type = ADAPTER_15W;
-		goto done;
-	} else if (rp_curr_ma == 1500) {
-		pdata->input_current_limit = 1500000;
-		det->iusb_ua = 1500000;
-		det->type = ADAPTER_7_5W;
-		goto done;
-	}
-
-	if (chr_type != STANDARD_CHARGER)
-		return 0;
-
-	/* Step 2: Run AICL for OCP detection on A2C adapter */
-	aicl_ua = adapter_power_detection_by_ocp(info);
-	if (aicl_ua < 0) {
-		pdata->input_current_limit = det->adapter_12w_iusb_lim;
-		det->iusb_ua = det->adapter_12w_iusb_lim;
-		det->type = ADAPTER_12W;
-		pr_info("%s: CV stage or 15W adapter, keep 12W as default\n",
-			__func__);
-		goto done;
-	}
-
-	/* Step 3: Determine adapter power categroy for 5W/9W/12W */
-	if (aicl_ua > det->adapter_12w_aicl_min) {
-		pdata->input_current_limit = det->adapter_12w_iusb_lim;
-		det->iusb_ua = det->adapter_12w_iusb_lim;
-		det->type = ADAPTER_12W;
-	} else if (aicl_ua > det->adapter_9w_aicl_min) {
-		pdata->input_current_limit = det->adapter_9w_iusb_lim;
-		det->iusb_ua = det->adapter_9w_iusb_lim;
-		det->type = ADAPTER_9W;
-	} else {
-		pdata->input_current_limit = det->adapter_5w_iusb_lim;
-		det->iusb_ua = det->adapter_5w_iusb_lim;
-		det->type = ADAPTER_5W;
-	}
-
-done:
-	bat_metrics_adapter_power(det->type, _uA_to_mA(aicl_ua));
-	pr_info("%s: detect %s adapter\n", __func__, category_text[det->type]);
-	return 0;
-
-skip:
-	if (pdata->thermal_input_current_limit != -1) {
-		pr_info("%s: use thermal_input_current_limit, ignore\n",
-			__func__);
-	} else {
-		pdata->input_current_limit = det->iusb_ua;
-		pr_info("%s: alread finish: %d mA, skip\n",
-			__func__, _uA_to_mA(pdata->input_current_limit));
-	}
-
-	return 0;
-}
-
 static void swchg_select_charging_current_limit(struct charger_manager *info)
 {
 	struct charger_data *pdata;
 	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
 	u32 ichg1_min = 0, aicr1_min = 0;
-	int ret = 0, iusb_ma = 0;
-	bool wpc_online = false;
+	int ret = 0;
 
-	wireless_charger_dev_get_online(get_charger_by_name("wireless_chg"), &wpc_online);
 	pdata = &info->chg1_data;
 	mutex_lock(&swchgalg->ichg_aicr_access_mutex);
 
 	/* AICL */
 	if (!mtk_pe20_get_is_connect(info) && !mtk_pe_get_is_connect(info)
-	    && !mtk_is_TA_support_pd_pps(info) && !wpc_online)
+	    && !mtk_is_TA_support_pd_pps(info))
 		charger_dev_run_aicl(info->chg1_dev,
 				&pdata->input_current_limit_by_aicl);
-
-	if (pdata->force_input_current_limit > 0) {
-		pdata->input_current_limit = pdata->force_input_current_limit;
-		if (pdata->force_charging_current > 0)
-			pdata->charging_current_limit =
-				pdata->force_charging_current;
-		else
-			pdata->charging_current_limit =
-				info->data.ac_charger_current;
-		goto done;
-	}
 
 	if (pdata->force_charging_current > 0) {
 
@@ -261,6 +120,8 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 		} else {
 			pdata->input_current_limit =
 					info->data.ac_charger_input_current;
+			pdata->charging_current_limit =
+					info->data.ac_charger_current;
 		}
 		goto done;
 	}
@@ -293,13 +154,11 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 	} else if (is_typec_adapter(info)) {
 		if (tcpm_inquire_typec_remote_rp_curr(info->tcpc) == 3000) {
 			pdata->input_current_limit = 3000000;
-			pdata->charging_current_limit =
-				info->data.ac_charger_current;
+			pdata->charging_current_limit = 3000000;
 		} else if (tcpm_inquire_typec_remote_rp_curr(info->tcpc)
 			   == 1500) {
 			pdata->input_current_limit = 1500000;
-			pdata->charging_current_limit =
-				info->data.ac_charger_current;
+			pdata->charging_current_limit = 2000000;
 		} else {
 			chr_err("type-C: inquire rp error\n");
 			pdata->input_current_limit = 500000;
@@ -383,39 +242,6 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 				info->data.apple_2_1a_charger_current;
 		pdata->charging_current_limit =
 				info->data.apple_2_1a_charger_current;
-	} else if (info->chr_type == WIRELESS_5W_CHARGER) {
-		pdata->input_current_limit =
-				info->data.wireless_5w_charger_input_current;
-		pdata->charging_current_limit =
-				info->data.wireless_5w_charger_current;
-
-		if (pdata->thermal_input_power_limit != -1) {
-			iusb_ma = pdata->thermal_input_power_limit * 1000 / 5;
-			if (iusb_ma < pdata->input_current_limit)
-				pdata->input_current_limit = iusb_ma;
-		}
-	} else if (info->chr_type == WIRELESS_10W_CHARGER) {
-		pdata->input_current_limit =
-				info->data.wireless_10w_charger_input_current;
-		pdata->charging_current_limit =
-				info->data.wireless_10w_charger_current;
-
-		if (pdata->thermal_input_power_limit != -1) {
-			iusb_ma = pdata->thermal_input_power_limit * 1000 / 9;
-			if (iusb_ma < pdata->input_current_limit)
-				pdata->input_current_limit = iusb_ma;
-		}
-	} else if (info->chr_type == WIRELESS_DEFAULT_CHARGER) {
-		pdata->input_current_limit =
-				info->data.wireless_default_charger_input_current;
-		pdata->charging_current_limit =
-				info->data.wireless_default_charger_current;
-
-		if (pdata->thermal_input_power_limit != -1) {
-			iusb_ma = pdata->thermal_input_power_limit * 1000 / 5;
-			if (iusb_ma < pdata->input_current_limit)
-				pdata->input_current_limit = iusb_ma;
-		}
 	}
 
 	if (info->enable_sw_jeita) {
@@ -424,18 +250,8 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 			pr_debug("USBIF & STAND_HOST skip current check\n");
 		else {
 			if (info->sw_jeita.sm == TEMP_T0_TO_T1) {
-				if (info->data.temp_t0_charging_current_limit <
-					pdata->charging_current_limit) {
-					pdata->charging_current_limit =
-						info->data.temp_t0_charging_current_limit;
-				}
-			}
-			if (info->sw_jeita.sm == TEMP_T3_TO_T4) {
-				if (info->data.temp_t3_charging_current_limit <
-					pdata->charging_current_limit) {
-					pdata->charging_current_limit =
-						info->data.temp_t3_charging_current_limit;
-				}
+				pdata->input_current_limit = 500000;
+				pdata->charging_current_limit = 350000;
 			}
 		}
 	}
@@ -470,23 +286,13 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 				info->pe4.pe4_input_current_limit_setting;
 	}
 
-	/* Apply selected current setting then do adapter power detection */
-	charger_dev_set_input_current(info->chg1_dev, pdata->input_current_limit);
-	charger_dev_set_charging_current(info->chg1_dev, pdata->charging_current_limit);
-	adapter_power_detection(info);
-
 	if (pdata->input_current_limit_by_aicl != -1 &&
 	    !mtk_pe20_get_is_connect(info) && !mtk_pe_get_is_connect(info) &&
 	    !mtk_is_TA_support_pd_pps(info)) {
-		if (info->vbus_recovery_from_uvlo) {
-			info->vbus_recovery_from_uvlo = false;
-			chr_err("%s: vbus recovery from UVLO, ignore aicl\n", __func__);
-		} else {
-			if (pdata->input_current_limit_by_aicl <
-				pdata->input_current_limit)
-				pdata->input_current_limit =
-				pdata->input_current_limit_by_aicl;
-		}
+		if (pdata->input_current_limit_by_aicl <
+		    pdata->input_current_limit)
+			pdata->input_current_limit =
+					pdata->input_current_limit_by_aicl;
 	}
 done:
 	ret = charger_dev_get_min_charging_current(info->chg1_dev, &ichg1_min);
@@ -497,11 +303,10 @@ done:
 	if (ret != -ENOTSUPP && pdata->input_current_limit < aicr1_min)
 		pdata->input_current_limit = 0;
 
-	chr_err("force:%d thermal:%d,%d %d(mW) pe4:%d,%d,%d setting:%d %d type:%d usb_unlimited:%d usbif:%d usbsm:%d aicl:%d atm:%d\n",
+	chr_err("force:%d thermal:%d,%d pe4:%d,%d,%d setting:%d %d type:%d usb_unlimited:%d usbif:%d usbsm:%d aicl:%d atm:%d\n",
 		_uA_to_mA(pdata->force_charging_current),
 		_uA_to_mA(pdata->thermal_input_current_limit),
 		_uA_to_mA(pdata->thermal_charging_current_limit),
-		pdata->thermal_input_power_limit,
 		_uA_to_mA(info->pe4.pe4_input_current_limit),
 		_uA_to_mA(info->pe4.pe4_input_current_limit_setting),
 		_uA_to_mA(info->pe4.input_current_limit),
@@ -545,21 +350,6 @@ static void swchg_select_cv(struct charger_manager *info)
 {
 	u32 constant_voltage;
 
-	if (info->custom_charging_cv != -1) {
-		if (info->enable_sw_jeita && info->sw_jeita.cv != 0) {
-			if (info->custom_charging_cv > info->sw_jeita.cv)
-				constant_voltage = info->sw_jeita.cv;
-			else
-				constant_voltage = info->custom_charging_cv;
-		} else {
-			constant_voltage = info->custom_charging_cv;
-		}
-		chr_err("%s: top_off_mode CV:%duV", __func__,
-			constant_voltage);
-		charger_dev_set_constant_voltage(info->chg1_dev, constant_voltage);
-		return;
-	}
-
 	if (info->enable_sw_jeita)
 		if (info->sw_jeita.cv != 0) {
 			charger_dev_set_constant_voltage(info->chg1_dev,
@@ -568,8 +358,7 @@ static void swchg_select_cv(struct charger_manager *info)
 		}
 
 	/* dynamic cv*/
-	constant_voltage = mtk_get_battery_cv(info);
-
+	constant_voltage = info->data.battery_cv;
 	mtk_get_dynamic_cv(info, &constant_voltage);
 
 	charger_dev_set_constant_voltage(info->chg1_dev, constant_voltage);
@@ -610,30 +399,11 @@ static void swchg_turn_on_charging(struct charger_manager *info)
 static int mtk_switch_charging_plug_in(struct charger_manager *info)
 {
 	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
-	if (info->enable_sw_safety_timer) {
-		if (info->disconnect_duration >=
-			info->sw_safety_timer_reset_time) {
-			chr_err("%s: Reset SW safety timer\n", __func__);
-			info->safety_timeout = false;
-			get_monotonic_boottime(&swchgalg->charging_begin_time);
-			swchgalg->total_charging_time = 0;
-		}
-	}
-	/* Keep charging state as CHR_BATFULL. */
-	if (info->enable_bat_eoc_protect) {
-		if (info->bat_eoc_protect) {
-			chr_err("%s: Keep charging state full\n", __func__);
-			swchgalg->state = CHR_BATFULL;
-			info->polling_interval = CHARGING_FULL_INTERVAL;
-			battery_main.BAT_STATUS = POWER_SUPPLY_STATUS_CHARGING;
-			battery_update(&battery_main);
-			charger_dev_do_event(info->chg1_dev, EVENT_EOC, 0);
-			return  0;
-		}
-	}
+
 	swchgalg->state = CHR_CC;
 	info->polling_interval = CHARGING_INTERVAL;
 	swchgalg->disable_charging = false;
+	get_monotonic_boottime(&swchgalg->charging_begin_time);
 	charger_manager_notifier(info, CHARGER_NOTIFY_START_CHARGING);
 
 	return 0;
@@ -641,7 +411,9 @@ static int mtk_switch_charging_plug_in(struct charger_manager *info)
 
 static int mtk_switch_charging_plug_out(struct charger_manager *info)
 {
-	info->power_detection.iusb_ua = 0;
+	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
+
+	swchgalg->total_charging_time = 0;
 
 	mtk_pe20_set_is_cable_out_occur(info, true);
 	mtk_pe_set_is_cable_out_occur(info, true);
@@ -667,17 +439,8 @@ static int mtk_switch_charging_do_charging(struct charger_manager *info,
 		/* disable charging might change state, so call it first */
 		_disable_all_charging(info);
 		swchgalg->disable_charging = true;
-		/* Force state machine to CHR_BATFULL if charging is
-		 * disabled by battery EOC protection.
-		 */
-		if (info->bat_eoc_protect == false) {
-			swchgalg->state = CHR_ERROR;
-			charger_manager_notifier(info, CHARGER_NOTIFY_ERROR);
-		} else {
-			swchgalg->state = CHR_BATFULL;
-			charger_dev_do_event(info->chg1_dev, EVENT_EOC, 0);
-			charger_dev_enable_ir_comp(info->chg1_dev, false);
-		}
+		swchgalg->state = CHR_ERROR;
+		charger_manager_notifier(info, CHARGER_NOTIFY_ERROR);
 	}
 
 	return 0;
@@ -753,7 +516,6 @@ static int mtk_switch_chr_cc(struct charger_manager *info)
 	if (chg_done) {
 		swchgalg->state = CHR_BATFULL;
 		charger_dev_do_event(info->chg1_dev, EVENT_EOC, 0);
-		charger_dev_enable_ir_comp(info->chg1_dev, false);
 		chr_err("battery full!\n");
 	}
 
@@ -815,13 +577,6 @@ int mtk_switch_chr_full(struct charger_manager *info)
 	 */
 	swchg_select_cv(info);
 	info->polling_interval = CHARGING_FULL_INTERVAL;
-
-	/* Keep charging state at CHR_BATFULL after triggering
-	 * battery EOC protection.
-	 */
-	if (info->bat_eoc_protect)
-		return 0;
-
 	charger_dev_is_charging_done(info->chg1_dev, &chg_done);
 	if (!chg_done) {
 		swchgalg->state = CHR_CC;
@@ -910,7 +665,6 @@ int charger_dev_event(struct notifier_block *nb, unsigned long event, void *v)
 	case CHARGER_DEV_NOTIFY_SAFETY_TIMEOUT:
 		info->safety_timeout = true;
 		chr_err("%s: safety timer timeout\n", __func__);
-		bat_metrics_chg_fault(METRICS_FAULT_SAFETY_TIMEOUT);
 
 		/* If sw safety timer timeout, do not wake up charger thread */
 		if (info->enable_sw_safety_timer)
@@ -919,7 +673,6 @@ int charger_dev_event(struct notifier_block *nb, unsigned long event, void *v)
 	case CHARGER_DEV_NOTIFY_VBUS_OVP:
 		info->vbusov_stat = data->vbusov_stat;
 		chr_err("%s: vbus ovp = %d\n", __func__, info->vbusov_stat);
-		bat_metrics_chg_fault(METRICS_FAULT_VBUS_OVP);
 		break;
 	default:
 		return NOTIFY_DONE;

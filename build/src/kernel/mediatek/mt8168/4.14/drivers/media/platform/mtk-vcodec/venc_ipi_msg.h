@@ -64,6 +64,7 @@ enum venc_get_param_type {
 	GET_PARAM_CAPABILITY_FRAME_SIZES,
 	GET_PARAM_FREE_BUFFERS,
 	GET_PARAM_ROI_RC_QP,
+	GET_PARAM_REFBUF_FRAME_NUM,
 };
 
 /*
@@ -103,6 +104,9 @@ enum venc_set_param_type {
 	VENC_SET_PARAM_SEC_MODE,
 	VENC_SET_PARAM_TSVC,
 	VENC_SET_PARAM_NONREFPFREQ,
+	VENC_SET_PARAM_MAX_REFP_NUM,
+	VENC_SET_PARAM_REFP_DISTANCE,
+	VENC_SET_PARAM_REFP_FRMNUM,
 };
 
 /**
@@ -387,6 +391,8 @@ struct venc_vcu_config {
 	__u32 bitratemode;
 	__u32 roi_rc_qp;
 	__u32 roion;
+	__u32 maxrefpnum;
+	__u32 maxrefbufFrameNum;
 };
 
 /**

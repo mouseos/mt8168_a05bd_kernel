@@ -72,7 +72,6 @@
 				MOTION_CONTROLLER)
 #define SONY_BT_DEVICE (SIXAXIS_CONTROLLER_BT | DUALSHOCK4_CONTROLLER_BT |\
 			MOTION_CONTROLLER_BT | NAVIGATION_CONTROLLER_BT)
-#define SONY_SKIP_BT_FEATURE_REPORT (DUALSHOCK4_CONTROLLER_BT)
 
 #define MAX_LEDS 4
 
@@ -400,27 +399,26 @@ static const unsigned int sixaxis_keymap[] = {
 static const unsigned int ds4_absmap[] = {
 	[0x30] = ABS_X,
 	[0x31] = ABS_Y,
-	[0x32] = ABS_Z, /* right stick X */
-	[0x33] = ABS_RX, /* L2 */
-	[0x34] = ABS_RY, /* R2 */
-	[0x35] = ABS_RZ, /* right stick Y */
+	[0x32] = ABS_RX, /* right stick X */
+	[0x33] = ABS_Z, /* L2 */
+	[0x34] = ABS_RZ, /* R2 */
+	[0x35] = ABS_RY, /* right stick Y */
 };
 
 static const unsigned int ds4_keymap[] = {
-	[0x1] = BTN_A, /* Square */
-	[0x2] = BTN_B, /* Cross */
-	[0x3] = BTN_C, /* Circle */
-	[0x4] = BTN_X, /* Triangle */
-	[0x5] = BTN_Y, /* L1 */
-	[0x6] = BTN_Z, /* R1 */
-	[0x7] = BTN_TL, /* L2 */
-	[0x8] = BTN_TR, /* R2 */
-	[0x9] = BTN_TL2, /* Share */
-	[0xa] = BTN_TR2, /* Options */
-	[0xb] = BTN_SELECT, /* L3 */
-	[0xc] = BTN_START, /* R3 */
+	[0x1] = BTN_WEST, /* Square */
+	[0x2] = BTN_SOUTH, /* Cross */
+	[0x3] = BTN_EAST, /* Circle */
+	[0x4] = BTN_NORTH, /* Triangle */
+	[0x5] = BTN_TL, /* L1 */
+	[0x6] = BTN_TR, /* R1 */
+	[0x7] = BTN_TL2, /* L2 */
+	[0x8] = BTN_TR2, /* R2 */
+	[0x9] = BTN_SELECT, /* Share */
+	[0xa] = BTN_START, /* Options */
+	[0xb] = BTN_THUMBL, /* L3 */
+	[0xc] = BTN_THUMBR, /* R3 */
 	[0xd] = BTN_MODE, /* PS */
-	[0xe] = BTN_THUMBL,
 };
 
 static const struct {int x; int y; } ds4_hat_mapping[] = {
@@ -1488,11 +1486,6 @@ static int dualshock4_get_calibration_data(struct sony_sc *sc)
 	short acc_z_plus, acc_z_minus;
 	int speed_2x;
 	int range_2g;
-
-	if (sc->quirks & SONY_SKIP_BT_FEATURE_REPORT) {
-		hid_err(sc->hdev, "Skip to request DS4 calibration data\n");
-		return 0;
-	}
 
 	/* For Bluetooth we use a different request, which supports CRC.
 	 * Note: in Bluetooth mode feature report 0x02 also changes the state
@@ -2660,8 +2653,7 @@ static int sony_input_configured(struct hid_device *hdev,
 			sc->ds4_dongle_state = DONGLE_DISCONNECTED;
 		}
 
-		if (!(sc->quirks & SONY_SKIP_BT_FEATURE_REPORT))
-			sony_init_output_report(sc, dualshock4_send_output_report);
+		sony_init_output_report(sc, dualshock4_send_output_report);
 	} else if (sc->quirks & MOTION_CONTROLLER) {
 		sony_init_output_report(sc, motion_send_output_report);
 	} else {
@@ -2736,7 +2728,7 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	spin_lock_init(&sc->lock);
-	hid_err(hdev, "quirks=0x%lx\n", quirks);
+
 	sc->quirks = quirks;
 	hid_set_drvdata(hdev, sc);
 	sc->hdev = hdev;

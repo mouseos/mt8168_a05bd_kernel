@@ -782,6 +782,65 @@
 #define AFE_I2S_CON_LOW_JITTER_CLK	BIT(12)
 #define AFE_I2S_CON_RATE(x)		(((x) & 0xf) << 8)
 #define AFE_I2S_CON_FORMAT_I2S		BIT(3)
+#define AFE_I2S_CON_SRC_SLAVE		BIT(2)
+
+/* AFE_ASRC_2CH_CON0 */
+#define ONE_HEART_MASK (0x1 << 31)
+#define CHSET_STR_CLR (0x1<<4)
+#define ASM_ON_MASK     (0x1<<0)
+#define ASM_ON     (0x1<<0)
+
+/* CON2 */
+#define O16BIT_MASK     (0x1<<19)
+#define CLR_IIR_HISTORY_MASK (0x1<<17)
+#define CLR_IIR_HISTORY      (0x1<<17)
+#define IS_MONO_MASK    (0x1<<16)
+#define IIR_EN_MASK     (0x1<<11)
+#define IIR_EN          (0x1<<11)
+#define IIR_DIS         (0x0<<11)
+#define IIR_STAGE_MASK  (0x7<<8)
+#define IIR_STAGE_8     (0x7<<8)
+
+/* CON5 */
+#define CALI_CYCLE_MASK (0xFFFF << 16)
+#define CALI_64_CYCLE (0x3F << 16)
+#define CALI_96_CYCLE (0x5F << 16)
+#define CALI_441_CYCLE (0x1B8 << 16)
+
+#define CALI_AUTORST_MASK (0x1 << 15)
+#define CALI_AUTORST_ENABLE (0x1 << 15)
+#define CALI_AUTORST_DISABLE (0x0 << 15)
+
+#define AUTO_TUNE_FREQ5_MASK (0x1 << 12)
+#define AUTO_TUNE_FREQ5_ENABLE (0x1 << 12)
+#define AUTO_TUNE_FREQ5_DISABLE (0x0 << 12)
+
+#define COMP_FREQ_RES_MASK (0x1 << 11)
+#define COMP_FREQ_RES_ENABLE (0x1 << 11)
+
+#define CALI_SEL_MASK (0x3 << 8)
+#define CALI_SEL_00 (0x0 << 8)
+#define CALI_SEL_01 (0x1 << 8)
+
+#define CALI_BP_DGL_MASK (0x1 << 7)
+#define CALI_BP_DGL_BYPASS (0x1 << 7)
+
+#define AUTO_TUNE_FREQ4_MASK (0x1 << 3)
+#define AUTO_TUNE_FREQ4_ENABLE (0x1 << 3)
+#define AUTO_TUNE_FREQ4_DISABLE (0x0 << 3)
+
+#define CALI_AUTO_RESTART_MASK (0x1 << 2)
+#define CALI_AUTO_RESTART_ENABLE (0x1 << 2)
+
+#define CALI_USE_FREQ_OUT_MASK (0x1 << 1)
+#define CALI_USE_FREQ (0x1 << 1)
+#define CALI_USE_PERIOD (0x0 << 1)
+
+#define CALI_ON_MASK (0x1 << 0)
+#define CALI_ON (0x1 << 0)
+#define CALI_OFF (0x0 << 0)
+
+
 #define AFE_I2S_CON_WLEN_32BIT		BIT(1)
 #define AFE_I2S_CON_EN			BIT(0)
 
@@ -974,6 +1033,7 @@
 #define DMIC_TOP_CON_DMIC_SRC_ON_MASK			BIT(0)
 #define DMIC_TOP_CON_DMIC_SRC_ON			(1 << 0)
 #define DMIC_TOP_CON_DMIC_SRC_OFF			(0 << 0)
+#define DMIC_TOP_CON_DMIC_SDM3_DE_SELECT		(0 << 1)
 #define DMIC_TOP_CON_CONFIG_MASK			(0x3f8ed7a6)
 
 /* AFE_TDM_ASRC_CON0  (0x06f8)*/
@@ -1005,6 +1065,17 @@
 #define AFE_24M_PLL_EN		BIT(1)
 #define AFE_24M_PLL_ON		(1 << 1)
 #define AFE_24M_PLL_OFF		(0 << 1)
+
+/* AFE_GAIN1_CON0 (0x0410) */
+#define AFE_GAIN1_CON0_EN_MASK		GENMASK(0, 0)
+#define AFE_GAIN1_CON0_MODE_MASK	GENMASK(7, 4)
+#define AFE_GAIN1_CON0_SAMPLE_PER_STEP_MASK	GENMASK(15, 8)
+
+/* AFE_GAIN1_CON1 (0x0414) */
+#define AFE_GAIN1_CON1_MASK		GENMASK(19, 0)
+
+/* AFE_GAIN1_CUR (0x0B78) */
+#define AFE_GAIN1_CUR_MASK		GENMASK(19, 0)
 
 /* AFE_CM1_CON0 (0x0e50) */
 /* AFE_CM2_CON0 (0x0e60) */

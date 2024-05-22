@@ -92,10 +92,6 @@ enum mtk_thermal_sensor_cpu_id_met {
 
 extern int tscpu_get_cpu_temp_met(enum mtk_thermal_sensor_cpu_id_met id);
 
-#ifdef CONFIG_VIRTUAL_SENSOR_THERMAL
-extern void thermal_budget_notify(int budget);
-#endif
-
 typedef void (*met_thermalsampler_funcMET)(void);
 
 extern void mt_thermalsampler_registerCB(met_thermalsampler_funcMET pCB);
@@ -104,7 +100,7 @@ extern void mtkTTimer_cancel_timer(void);
 
 extern void mtkTTimer_start_timer(void);
 
-extern int mtkts_bts_get_hw_temp(int index);
+extern int mtkts_bts_get_hw_temp(void);
 
 extern int get_immediate_ts1_wrap(void);
 
@@ -141,6 +137,5 @@ extern void thermal_set_big_core_speed
  * and no thermal current limit.
  */
 extern int mtk_cooler_is_abcct_unlimit(void);
-extern int mtktscharger_get_hw_temp(void);
 
 #endif /* __MT8168_THERMAL_H__ */

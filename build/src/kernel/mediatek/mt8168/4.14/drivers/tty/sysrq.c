@@ -153,58 +153,6 @@ static struct sysrq_key_op sysrq_crash_op = {
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
 
-#if defined(CONFIG_MAGIC_SYSRQ_WD_TEST)
-static DEFINE_SPINLOCK(wdt_lock);
-bool __attribute__ ((weak)) mtk_wdt_mode_config_for_sysrq(void)
-{
-	return false;
-}
-
-void __attribute__ ((weak)) deactive_mtk_wdd(void)
-{
-
-}
-
-static void sysrq_handle_wdt_sw_rst(int key)
-{
-	deactive_mtk_wdd();
-
-	/* For SOFTLOCKUP */
-	spin_lock(&wdt_lock);
-	while (1)
-		;
-}
-
-static struct sysrq_key_op sysrq_wdt_sw_op = {
-	.handler	= sysrq_handle_wdt_sw_rst,
-	.help_msg	= "wdt sw rst(x)",
-	.action_msg	= "Trigger a sw wdt reset",
-	.enable_mask	= SYSRQ_ENABLE_DUMP,
-};
-
-static void sysrq_handle_wdt_hw_rst(int key)
-{
-	unsigned long flags;
-
-	if (unlikely(mtk_wdt_mode_config_for_sysrq() == false))
-		return;
-	deactive_mtk_wdd();
-
-	/* For HARDLOCKUP */
-	spin_lock_irqsave(&wdt_lock, flags);
-	while (1)
-		;
-}
-
-static struct sysrq_key_op sysrq_wdt_hw_op = {
-	.handler	= sysrq_handle_wdt_hw_rst,
-	.help_msg	= "wdt hw rst(y)",
-	.action_msg	= "Trigger a hw wdt reset",
-	.enable_mask	= SYSRQ_ENABLE_DUMP,
-};
-#endif /* CONFIG_MAGIC_SYSRQ_WD_TEST */
-
-
 static void sysrq_handle_reboot(int key)
 {
 	lockdep_off();
@@ -536,17 +484,12 @@ static struct sysrq_key_op *sysrq_key_table[36] = {
 	/* v: May be registered for frame buffer console restore */
 	NULL,				/* v */
 	&sysrq_showstate_blocked_op,	/* w */
-#if defined(CONFIG_MAGIC_SYSRQ_WD_TEST)
-	&sysrq_wdt_sw_op,			/* x */
-	&sysrq_wdt_hw_op,			/* y */
-#else
 	/* x: May be registered on mips for TLB dump */
 	/* x: May be registered on ppc/powerpc for xmon */
 	/* x: May be registered on sparc64 for global PMU dump */
 	NULL,				/* x */
 	/* y: May be registered on sparc64 for global register dump */
 	NULL,				/* y */
-#endif
 	&sysrq_ftrace_dump_op,		/* z */
 };
 

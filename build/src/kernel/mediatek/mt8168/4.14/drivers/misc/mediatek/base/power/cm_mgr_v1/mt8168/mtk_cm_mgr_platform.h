@@ -94,4 +94,5 @@ extern int cm_mgr_get_dram_opp(void);
 extern void cm_mgr_emi_latency(int enable);
 extern void cm_emi_mon_init(void);
 extern void cm_emi_mon_restart(void);
+extern bool is_8168_dram_type_pcddr(void);
 #endif	/* __MTK_CM_MGR_PLATFORM_H__ */

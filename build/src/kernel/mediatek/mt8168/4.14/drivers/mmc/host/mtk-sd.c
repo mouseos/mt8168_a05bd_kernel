@@ -38,18 +38,14 @@
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/slot-gpio.h>
 
-#ifdef CONFIG_PM_DEVFREQ
 #include <linux/pm_qos.h>
 #ifdef CONFIG_MACH_MT8168
 #include "helio-dvfsrc-opp-mt8168.h"
 #endif
-#endif
+#include <linux/time.h>
 #ifdef CONFIG_MTK_EMMC_HW_CQ
 #include "cmdq_hci.h"
 #include "../core/card.h"
-#endif
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-#include <linux/metricslog.h>
 #endif
 
 #include <asm-generic/div64.h>
@@ -270,6 +266,11 @@
 #define MSDC_PAD_TUNE_RD_SEL	  (0x1 << 13)   /* RW */
 #define MSDC_PAD_TUNE_CMD_SEL	  (0x1 << 21)   /* RW */
 
+#define MSDC_PAD_TUNE_DATRRDLY2   (0x1f <<  8)  /* RW */
+#define MSDC_PAD_TUNE_RD_SEL2     (0x1 << 13)   /* RW */
+#define MSDC_PAD_TUNE_CMDRDLY2    (0x1f << 16)  /* RW */
+#define MSDC_PAD_TUNE_CMD_SEL2    (0x1 << 21)   /* RW */
+
 #define PAD_DS_TUNE_DLY1	  (0x1f << 2)   /* RW */
 #define PAD_DS_TUNE_DLY2	  (0x1f << 7)   /* RW */
 #define PAD_DS_TUNE_DLY3	  (0x1f << 12)  /* RW */
@@ -316,14 +317,9 @@
 #define MTK_MMC_AUTOSUSPEND_DELAY	50
 #define CMD_TIMEOUT         (HZ/10 * 5)	/* 100ms x5 */
 #define DAT_TIMEOUT         (HZ    * 5)	/* 1000ms x5 */
-#ifdef CONFIG_AMAZON_METRICS_LOG
-#define SDCARD_HOST_NAME	"mmc1"
-#endif
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-#define METRICS_DELAY       HZ
-#endif
 
 #define PAD_DELAY_MAX	32 /* PAD delay cells */
+#define TUNE_STEP_MAX	64
 /*--------------------------------------------------------------------------*/
 /* Descriptor Structure                                                     */
 /*--------------------------------------------------------------------------*/
@@ -397,6 +393,9 @@ struct mtk_mmc_compatible {
 	bool enhance_rx;
 	bool support_64g;
 	bool tune_resp_data_together;
+	bool tune_64_step;
+	bool vcore_fs;	/* support VCore DVFS */
+	u8 vcore_gears; /* support VCore gears */
 	u8 ckgen_delay;
 };
 
@@ -412,6 +411,14 @@ struct msdc_delay_phase {
 	u8 maxlen;
 	u8 start;
 	u8 final_phase;
+};
+
+struct msdc_pm_qos_list {
+#define MAX_VCORE_NUM	4
+	struct pm_qos_request msdc_pm_qos;
+	u64 window[MAX_VCORE_NUM];
+	u64 final_window;
+	u8 vcore_num;
 };
 
 struct msdc_host {
@@ -462,194 +469,8 @@ struct msdc_host {
 	struct msdc_save_para save_para; /* used when gate HCLK */
 	struct msdc_tune_para def_tune_para; /* default tune setting */
 	struct msdc_tune_para saved_tune_para; /* tune result of CMD21/CMD19 */
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	u32 tune_flag; /* flag defined for emmc window */
-#endif
-#ifdef CONFIG_PM_DEVFREQ
-	struct pm_qos_request pm_qos;
-#endif
-
-	u32 crc_count;	/* total crc count */
-	u32 crc_invalid_count;	/* total crc invalid count eg CMD19 */
-	u32 req_count; /* total request count */
-	u32 datatimeout_count; /* total data timeout count */
-	u32 cmdtimeout_count; /* total cmd timeout count */
-	u32 reqtimeout_count; /* total req timeout count */
-	u32 pc_count;	/* total power cycle count */
-	u32 pc_suspend;	/* suspend/resume count */
-	u32 cmd19_fail; /* cmd19 tune failed count */
-
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	struct delayed_work metrics_work;
-	bool metrics_enable;
-	u32 crc_count_p;	/* reported crc count */
-	u32 crc_invalid_count_p;	/* reported crc invalid count eg CMD19 */
-	u32 req_count_p; /* reported request count */
-	u32 datatimeout_count_p; /* reported data timeout count */
-	u32 cmdtimeout_count_p; /* reported cmd timeout count */
-	u32 reqtimeout_count_p; /* reported req timeout count */
-	u32 pc_count_p;	/* reported power cycle count */
-	u32 pc_suspend_p;	/* reported suspend/resume count */
-	u32 cmd19_fail_p; /* reported cmd19 tune failed count */
-	u32 inserted_p; /* reported card detection count */
-	u32 inserted; /* total card detection could */
-#endif
+	struct msdc_pm_qos_list qos_list;
 };
-
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-#define MMC_TUNE_FLAG_NONE      0x0
-#define MMC_TUNE_FLAG_RSP       0x1
-#define MMC_TUNE_FLAG_DAT       0x2
-#define MMC_TUNE_FLAG_RETUNE    0x4
-#define MMC_TUNE_FLAG_RSP_DAT   (MMC_TUNE_FLAG_RSP | MMC_TUNE_FLAG_DAT)
-
-#define NEED_TUNE_RSP(host)     (((host)->tune_flag & MMC_TUNE_FLAG_RSP) ? false : true)
-#define NEED_TUNE_DAT(host)     (((host)->tune_flag & MMC_TUNE_FLAG_DAT) ? false : true)
-#define NEED_TUNE_RSP_DAT(host) (((host)->tune_flag & MMC_TUNE_FLAG_RSP_DAT) ? false : true)
-#define SET_RSP_TUNED(host)     ((host)->tune_flag |= MMC_TUNE_FLAG_RSP)
-#define SET_DAT_TUNED(host)     ((host)->tune_flag |= MMC_TUNE_FLAG_DAT)
-#define SET_RSP_DAT_TUNED(host) do {                \
-	if ((host)->tune_flag == MMC_TUNE_FLAG_NONE) {  \
-		(host)->tune_flag |= MMC_TUNE_FLAG_RETUNE;  \
-	} else {                                        \
-		(host)->tune_flag |= MMC_TUNE_FLAG_RSP_DAT; \
-	}                                               \
-} while (0)
-#endif
-
-#ifdef CONFIG_AMAZON_METRICS_LOG
-#define MSDC_LOG_COUNTER_TO_VITALS(name, value) \
-	do { \
-		if (value != value##_p) { \
-			log_counter_to_vitals(ANDROID_LOG_INFO, "Kernel", "Kernel", \
-				((host->mmc) && (host->mmc->caps & MMC_CAP_SD_HIGHSPEED)) ? "SD" : "EMMC", \
-				#name, value - value##_p, "count", NULL, VITALS_NORMAL); \
-			value##_p = value; \
-		} \
-	} while (0)
-#endif
-
-#ifdef CONFIG_AMAZON_MINERVA_METRICS_LOG
-#define MSDC_MINERVA_COUNTER_TO_VITALS(name, value) \
-	do { \
-		if (value != value##_p) { \
-			log_counter_to_vitals_v2(ANDROID_LOG_INFO, \
-				VITALS_EMMC_GROUP_ID, VITALS_EMMC_SCHEMA_ID, \
-				"Kernel", "msdc_state", \
-				((host->mmc) && (host->mmc->caps & MMC_CAP_SD_HIGHSPEED)) ? "SD" : "EMMC", \
-				#name, value - value##_p, "count", NULL, VITALS_NORMAL, NULL, NULL); \
-				value##_p = value; \
-		} \
-	} while (0)
-#endif
-
-#define FILTER_INVALIDCMD(opcode) \
-((opcode == MMC_SLEEP_AWAKE) || (opcode == MMC_SEND_EXT_CSD) || (opcode == MMC_BUS_TEST_W) \
-	|| (opcode == MMC_SEND_TUNING_BLOCK_HS200) || (opcode == SD_IO_RW_DIRECT) \
-	|| (opcode == MMC_APP_CMD))
-
-#define MSDC_DEV_ATTR(name, fmt, val, fmt_type)					\
-static ssize_t msdc_attr_##name##_show(struct device *dev, struct device_attribute *attr, char *buf)	\
-{										\
-	struct mmc_host *mmc = dev_get_drvdata(dev);				\
-	struct msdc_host *host = mmc_priv(mmc);					\
-	return sprintf(buf, fmt "\n", (fmt_type)val);				\
-}										\
-static ssize_t msdc_attr_##name##_store(struct device *dev,			\
-	struct device_attribute *attr, const char *buf, size_t count)		\
-{										\
-	fmt_type tmp;								\
-	struct mmc_host *mmc = dev_get_drvdata(dev);				\
-	struct msdc_host *host = mmc_priv(mmc);					\
-	int n = sscanf(buf, fmt, &tmp);						\
-	val = (typeof(val))tmp;							\
-	return n ? count : -EINVAL;						\
-}										\
-static DEVICE_ATTR(name, 0664, msdc_attr_##name##_show, msdc_attr_##name##_store)
-
-
-MSDC_DEV_ATTR(crc_count, "%d", host->crc_count, u32);
-MSDC_DEV_ATTR(crc_invalid_count, "%d", host->crc_invalid_count, u32);
-MSDC_DEV_ATTR(req_count, "%d", host->req_count, u32);
-MSDC_DEV_ATTR(datatimeout_count, "%d", host->datatimeout_count, u32);
-MSDC_DEV_ATTR(cmdtimeout_count, "%d", host->cmdtimeout_count, u32);
-MSDC_DEV_ATTR(reqtimeout_count, "%d", host->reqtimeout_count, u32);
-MSDC_DEV_ATTR(pc_count, "%d", host->pc_count, u32);
-MSDC_DEV_ATTR(pc_suspend, "%d", host->pc_suspend, u32);
-MSDC_DEV_ATTR(cmd19_fail, "%d", host->cmd19_fail, u32);
-
-static struct device_attribute *msdc_attrs[] = {
-	&dev_attr_crc_count,
-	&dev_attr_crc_invalid_count,
-	&dev_attr_req_count,
-	&dev_attr_datatimeout_count,
-	&dev_attr_cmdtimeout_count,
-	&dev_attr_reqtimeout_count,
-	&dev_attr_pc_count,
-	&dev_attr_pc_suspend,
-	&dev_attr_cmd19_fail,
-	NULL,
-};
-
-static void msdc_add_device_attrs(struct msdc_host *host, struct device_attribute *attrs[])
-{
-	int i, ret;
-
-	if (!attrs)
-		return;
-
-	for (i = 0; attrs[i]; ++i) {
-		ret = device_create_file(host->dev, attrs[i]);
-		if (ret)
-			dev_err(host->dev, "failed to register attribute: %s; err=%d\n",
-				attrs[i]->attr.name, ret);
-	}
-}
-
-static void msdc_remove_device_attrs(struct msdc_host *host, struct device_attribute *attrs[])
-{
-	int i;
-
-	if (!attrs)
-		return;
-
-	for (i = 0; attrs[i]; ++i)
-		device_remove_file(host->dev, attrs[i]);
-}
-
-#if defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-static void msdc_metrics_work(struct work_struct *work)
-{
-	struct msdc_host *host = container_of(work, struct msdc_host, metrics_work.work);
-
-	MSDC_MINERVA_COUNTER_TO_VITALS(crc, host->crc_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(crc_invalid, host->crc_invalid_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(req, host->req_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(datato, host->datatimeout_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(cmdto, host->cmdtimeout_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(reqto, host->reqtimeout_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(pc_count, host->pc_count);
-	MSDC_MINERVA_COUNTER_TO_VITALS(pc_suspend, host->pc_suspend);
-	MSDC_MINERVA_COUNTER_TO_VITALS(cmd19_fail, host->cmd19_fail);
-	MSDC_MINERVA_COUNTER_TO_VITALS(inserted, host->inserted);
-}
-#elif defined(CONFIG_AMAZON_METRICS_LOG)
-static void msdc_metrics_work(struct work_struct *work)
-{
-	struct msdc_host *host = container_of(work, struct msdc_host, metrics_work.work);
-
-	MSDC_LOG_COUNTER_TO_VITALS(crc, host->crc_count);
-	MSDC_LOG_COUNTER_TO_VITALS(crc_invalid, host->crc_invalid_count);
-	MSDC_LOG_COUNTER_TO_VITALS(req, host->req_count);
-	MSDC_LOG_COUNTER_TO_VITALS(datato, host->datatimeout_count);
-	MSDC_LOG_COUNTER_TO_VITALS(cmdto, host->cmdtimeout_count);
-	MSDC_LOG_COUNTER_TO_VITALS(reqto, host->reqtimeout_count);
-	MSDC_LOG_COUNTER_TO_VITALS(pc_count, host->pc_count);
-	MSDC_LOG_COUNTER_TO_VITALS(pc_suspend, host->pc_suspend);
-	MSDC_LOG_COUNTER_TO_VITALS(cmd19_fail, host->cmd19_fail);
-	MSDC_LOG_COUNTER_TO_VITALS(inserted, host->inserted);
-}
-#endif
 
 static const struct mtk_mmc_compatible mt8135_compat = {
 	.clk_div_bits = 8,
@@ -690,6 +511,9 @@ static const struct mtk_mmc_compatible mt8168_compat = {
 	.enhance_rx = true,
 	.support_64g = true,
 	.tune_resp_data_together = true,
+	.tune_64_step = true,
+	.vcore_fs = true,
+	.vcore_gears = 3,
 	.ckgen_delay = 0,
 };
 
@@ -1220,14 +1044,6 @@ static void msdc_start_data(struct msdc_host *host, struct mmc_request *mrq,
 	read = data->flags & MMC_DATA_READ;
 
 	mod_delayed_work(system_wq, &host->req_timeout, DAT_TIMEOUT);
-	host->req_count++;
-#ifdef CONFIG_AMAZON_METRICS_LOG
-	if (!strcmp(mmc_hostname(host->mmc), SDCARD_HOST_NAME))
-		atomic64_inc(&host->mmc->data_count);
-#endif
-	dev_dbg(host->dev, "crc/total %d/%d invalcrc %d datato %d cmdto %d reqto %d total_pc %d pc_sus %d\n",
-			host->crc_count, host->req_count, host->crc_invalid_count, host->datatimeout_count,
-			host->cmdtimeout_count, host->reqtimeout_count, host->pc_count, host->pc_suspend);
 	msdc_dma_setup(host, &host->dma, data);
 	sdr_set_bits(host->base + MSDC_INTEN, data_ints_mask);
 	sdr_set_field(host->base + MSDC_DMA_CTRL, MSDC_DMA_CTRL_START, 1);
@@ -1344,19 +1160,10 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 		if (events & MSDC_INT_RSPCRCERR) {
 			cmd->error = -EILSEQ;
 			host->error |= REQ_CMD_EIO;
-			if (FILTER_INVALIDCMD(cmd->opcode))
-				host->crc_invalid_count++;
-			else
-				host->crc_count++;
 		} else if (events & MSDC_INT_CMDTMO) {
 			cmd->error = -ETIMEDOUT;
 			host->error |= REQ_CMD_TMO;
-			host->cmdtimeout_count++;
 		}
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-		if (host->metrics_enable)
-			mod_delayed_work(system_wq, &host->metrics_work, METRICS_DELAY);
-#endif
 	}
 	if (cmd->error &&
 	    cmd->opcode != MMC_SEND_TUNING_BLOCK &&
@@ -1427,7 +1234,7 @@ static void msdc_start_command(struct msdc_host *host,
 	cmd->error = 0;
 	rawcmd = msdc_cmd_prepare_raw_cmd(host, mrq, cmd);
 	mod_delayed_work(system_wq, &host->req_timeout, DAT_TIMEOUT);
-	host->req_count++;
+
 	spin_lock_irqsave(&host->lock, flags);
 	sdr_set_bits(host->base + MSDC_INTEN, cmd_ints_mask);
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -1550,30 +1357,16 @@ static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
 			host->error |= REQ_DAT_ERR;
 			data->bytes_xfered = 0;
 
-			if (events & MSDC_INT_DATTMO) {
+			if (events & MSDC_INT_DATTMO)
 				data->error = -ETIMEDOUT;
-				host->datatimeout_count++;
-#ifdef CONFIG_AMAZON_METRICS_LOG
-				if (!strcmp(mmc_hostname(host->mmc), SDCARD_HOST_NAME))
-					atomic64_inc(&host->mmc->data_timeout_count);
-#endif
-			} else if (events & MSDC_INT_DATCRCERR) {
+			else if (events & MSDC_INT_DATCRCERR)
 				data->error = -EILSEQ;
-				if (FILTER_INVALIDCMD(mrq->cmd->opcode))
-					host->crc_invalid_count++;
-				else
-					host->crc_count++;
-			}
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-			if (host->metrics_enable)
-				mod_delayed_work(system_wq, &host->metrics_work, METRICS_DELAY);
-#endif
-			if (data->error != -EILSEQ &&
-			    mrq->cmd->opcode != MMC_SEND_TUNING_BLOCK &&
+			if (mrq->cmd->opcode != MMC_SEND_TUNING_BLOCK &&
 			    mrq->cmd->opcode != MMC_SEND_TUNING_BLOCK_HS200) {
-				dev_err(host->dev, "%s: cmd=%d; blocks=%d",
-					__func__, mrq->cmd->opcode, data->blocks);
-				dev_err(host->dev, "data_error=%d xfer_size=%d\n",
+				dev_info(host->dev, "%s: cmd=%d; blocks=%d",
+					__func__, mrq->cmd->opcode,
+					data->blocks);
+				dev_info(host->dev, "data_error=%d xfer_size=%d\n",
 					(int)data->error, data->bytes_xfered);
 			}
 		}
@@ -1650,7 +1443,6 @@ static void msdc_request_timeout(struct work_struct *work)
 
 	/* simulate HW timeout status */
 	dev_err(host->dev, "%s: aborting cmd/data/mrq\n", __func__);
-	host->reqtimeout_count++;
 	if (host->mrq) {
 		dev_err(host->dev, "%s: aborting mrq=%p cmd=%d\n", __func__,
 				host->mrq, host->mrq->cmd->opcode);
@@ -1856,6 +1648,13 @@ static void msdc_init_hw(struct msdc_host *host)
 				     DATA_K_VALUE_SEL);
 			sdr_set_bits(host->top_base + EMMC_TOP_CMD,
 				     PAD_CMD_RD_RXDLY_SEL);
+
+			if (host->dev_comp->tune_64_step) {
+				sdr_set_bits(host->top_base + EMMC_TOP_CONTROL,
+					     PAD_DAT_RD_RXDLY2_SEL);
+				sdr_set_bits(host->top_base + EMMC_TOP_CMD,
+					     PAD_CMD_RD_RXDLY2_SEL);
+			}
 		} else {
 			sdr_set_bits(host->base + tune_reg,
 				     MSDC_PAD_TUNE_RD_SEL |
@@ -1981,14 +1780,6 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		if (!IS_ERR(mmc->supply.vqmmc) && host->vqmmc_enabled) {
 			regulator_disable(mmc->supply.vqmmc);
 			host->vqmmc_enabled = false;
-			host->pc_count++;
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-			if (host->metrics_enable)
-				mod_delayed_work(system_wq, &host->metrics_work, METRICS_DELAY);
-#endif
-			dev_info(host->dev, "crc/total %d/%d invalcrc %d datato %d cmdto %d reqto %d total_pc %d pc_sus %d\n",
-				host->crc_count, host->req_count, host->crc_invalid_count, host->datatimeout_count,
-				host->cmdtimeout_count, host->reqtimeout_count, host->pc_count, host->pc_suspend);
 		}
 		break;
 	default:
@@ -1999,24 +1790,24 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		msdc_set_mclk(host, ios->timing, ios->clock);
 }
 
-static u32 test_delay_bit(u32 delay, u32 bit)
+static u64 test_delay_bit(u64 delay, u32 bit)
 {
-	bit %= PAD_DELAY_MAX;
-	return delay & (1 << bit);
+	bit %= TUNE_STEP_MAX;
+	return delay & (1ULL << bit);
 }
 
-static int get_delay_len(u32 delay, u32 start_bit)
+static int get_delay_len(u64 delay, u32 start_bit)
 {
 	int i;
 
-	for (i = 0; i < (PAD_DELAY_MAX - start_bit); i++) {
+	for (i = 0; i < (TUNE_STEP_MAX - start_bit); i++) {
 		if (test_delay_bit(delay, start_bit + i) == 0)
 			return i;
 	}
-	return PAD_DELAY_MAX - start_bit;
+	return TUNE_STEP_MAX - start_bit;
 }
 
-static struct msdc_delay_phase get_best_delay(struct msdc_host *host, u32 delay)
+static struct msdc_delay_phase get_best_delay(struct msdc_host *host, u64 delay)
 {
 	int start = 0, len = 0;
 	int start_final = 0, len_final = 0;
@@ -2024,28 +1815,30 @@ static struct msdc_delay_phase get_best_delay(struct msdc_host *host, u32 delay)
 	struct msdc_delay_phase delay_phase = { 0, };
 
 	if (delay == 0) {
-		dev_err(host->dev, "phase error: [map:%x]\n", delay);
+		dev_err(host->dev, "phase error: [map:0x%016llx]\n", delay);
 		delay_phase.final_phase = final_phase;
 		return delay_phase;
 	}
 
-	while (start < PAD_DELAY_MAX) {
+	while (start < TUNE_STEP_MAX) {
 		len = get_delay_len(delay, start);
 		if (len_final < len) {
 			start_final = start;
 			len_final = len;
 		}
 		start += len ? len : 1;
-		if (len >= 12 && start_final < 4)
-			break;
+		if (!host->dev_comp->tune_64_step) {
+			if (len >= 12 && start_final < 4)
+				break;
+		}
 	}
 
 	/* The rule is that to find the smallest delay cell */
 	if (start_final == 0)
-		final_phase = (start_final + len_final / 3) % PAD_DELAY_MAX;
+		final_phase = (start_final + len_final / 3) % TUNE_STEP_MAX;
 	else
-		final_phase = (start_final + len_final / 2) % PAD_DELAY_MAX;
-	dev_info(host->dev, "phase: [map:%x] [maxlen:%d] [final:%d]\n",
+		final_phase = (start_final + len_final / 2) % TUNE_STEP_MAX;
+	dev_info(host->dev, "phase: [map:0x%016llx] [maxlen:%d] [final:%d]\n",
 		 delay, len_final, final_phase);
 
 	delay_phase.maxlen = len_final;
@@ -2053,19 +1846,72 @@ static struct msdc_delay_phase get_best_delay(struct msdc_host *host, u32 delay)
 	delay_phase.final_phase = final_phase;
 	return delay_phase;
 }
+/*
+ * dly_line: 0 --> delay line 0
+ * dly_line: 1 --> delay line 1
+ */
+static inline void msdc_set_cmd_delay(struct msdc_host *host, u32 value,
+				      u8 dly_line)
+{
+	u32 tune_reg = host->dev_comp->pad_tune_reg;
+
+	if (host->top_base) {
+		sdr_set_field(host->top_base + EMMC_TOP_CMD,
+			      dly_line ? PAD_CMD_RXDLY2 : PAD_CMD_RXDLY, value);
+	} else {
+		if (dly_line)
+			sdr_set_field(host->base + tune_reg + 4,
+				      MSDC_PAD_TUNE_CMDRDLY2, value);
+		else
+			sdr_set_field(host->base + tune_reg,
+				      MSDC_PAD_TUNE_CMDRDLY, value);
+	}
+}
+
+static inline void msdc_set_data_delay(struct msdc_host *host, u32 value,
+				       u8 dly_line)
+{
+	u32 tune_reg = host->dev_comp->pad_tune_reg;
+
+	if (host->top_base) {
+		sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
+			      dly_line ? PAD_DAT_RD_RXDLY2 : PAD_DAT_RD_RXDLY,
+			      value);
+	} else {
+		if (dly_line)
+			sdr_set_field(host->base + tune_reg + 4,
+				      MSDC_PAD_TUNE_DATRRDLY2, value);
+		else
+			sdr_set_field(host->base + tune_reg,
+				      MSDC_PAD_TUNE_DATRRDLY, value);
+	}
+}
+
+static void msdc_set_final_window(struct msdc_host *host, u8 delay, u8 edge)
+{
+	u32 dly1, dly2 = 0;
+
+	dly1 = delay > 31 ? 31 : delay;
+	dly2 = delay > 31 ? delay - 31 : 0;
+
+	sdr_set_field(host->base + MSDC_IOCON, MSDC_IOCON_RSPL, edge);
+	sdr_set_field(host->base + MSDC_IOCON, MSDC_IOCON_DSPL, edge);
+	sdr_set_field(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL, edge);
+
+	msdc_set_cmd_delay(host, dly1, 0);
+	msdc_set_data_delay(host, dly1, 0);
+	msdc_set_cmd_delay(host, dly2, 1);
+	msdc_set_data_delay(host, dly2, 1);
+}
 
 static int msdc_tune_resp_data(struct mmc_host *mmc, u32 opcode)
 {
 	struct msdc_host *host = mmc_priv(mmc);
-	u32 rise_delay = 0, fall_delay = 0;
+	u64 rise_delay = 0, fall_delay = 0;
 	struct msdc_delay_phase final_rise_delay, final_fall_delay = { 0,};
-	u8 final_delay, final_maxlen;
-	u32 tune_reg = host->dev_comp->pad_tune_reg;
+	u8 final_delay, final_maxlen, final_edge;
 	int err;
 	int i, j;
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	struct msdc_delay_phase debug_fall_delay = { 0, };
-#endif
 
 	sdr_set_field(host->base + MSDC_PATCH_BIT, MSDC_INT_DAT_LATCH_CK_SEL,
 		      host->latch_ck);
@@ -2073,17 +1919,8 @@ static int msdc_tune_resp_data(struct mmc_host *mmc, u32 opcode)
 	sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 	sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
 	for (i = 0 ; i < PAD_DELAY_MAX; i++) {
-		if (host->top_base != NULL) {
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY, i);
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY, i);
-		} else {
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY, i);
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY, i);
-		}
+		msdc_set_cmd_delay(host, i, 0);
+		msdc_set_data_delay(host, i, 0);
 		/*
 		 * Using the same parameters, it may sometimes pass the test,
 		 * but sometimes it may fail. To make sure the parameters are
@@ -2092,118 +1929,181 @@ static int msdc_tune_resp_data(struct mmc_host *mmc, u32 opcode)
 		for (j = 0; j < 3; j++) {
 			err = mmc_send_tuning(mmc, opcode, NULL);
 			if (!err) {
-				rise_delay |= (1 << i);
+				rise_delay |= (1ULL << i);
 			} else {
-				rise_delay &= ~(1 << i);
+				rise_delay &= ~(1ULL << i);
 				break;
+			}
+		}
+	}
+
+	if (host->dev_comp->tune_64_step) {
+		for (i = 0 ; i < PAD_DELAY_MAX; i++) {
+			msdc_set_cmd_delay(host, i, 1);
+			msdc_set_data_delay(host, i, 1);
+			for (j = 0; j < 3; j++) {
+				err = mmc_send_tuning(mmc, opcode, NULL);
+				if (!err) {
+					rise_delay |= (1ULL << (i + 32));
+				} else {
+					rise_delay &= ~(1ULL << (i + 32));
+					break;
+				}
 			}
 		}
 	}
 	final_rise_delay = get_best_delay(host, rise_delay);
 	/* if rising edge has enough margin, then do not scan falling edge */
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	if ((final_rise_delay.maxlen >= 12) && !NEED_TUNE_RSP_DAT(host))
-#else
-	if (final_rise_delay.maxlen >= 12)
-#endif
+	if (final_rise_delay.maxlen >= 12 ||
+	    (final_rise_delay.start == 0 && final_rise_delay.maxlen >= 4))
 		goto skip_fall;
 
 	sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
 	sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 	sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
 	for (i = 0; i < PAD_DELAY_MAX; i++) {
-		if (host->top_base != NULL) {
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY, i);
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY, i);
-		} else {
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY, i);
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY, i);
-		}
+		msdc_set_cmd_delay(host, i, 0);
+		msdc_set_data_delay(host, i, 0);
 
 		for (j = 0; j < 3; j++) {
 			err = mmc_send_tuning(mmc, opcode, NULL);
 			if (!err) {
-				fall_delay |= (1 << i);
+				fall_delay |= (1ULL << i);
 			} else {
-				fall_delay &= ~(1 << i);
+				fall_delay &= ~(1ULL << i);
 				break;
 			}
 		}
 	}
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	if (NEED_TUNE_RSP_DAT(host))
-		debug_fall_delay = get_best_delay(host, fall_delay);
-	if (final_rise_delay.maxlen < 12)
-#endif
-		final_fall_delay = get_best_delay(host, fall_delay);
+	final_fall_delay = get_best_delay(host, fall_delay);
 
 skip_fall:
 	final_maxlen = max(final_rise_delay.maxlen, final_fall_delay.maxlen);
 	if (final_fall_delay.maxlen >= 12 && final_fall_delay.start < 4)
 		final_maxlen = final_fall_delay.maxlen;
+
 	if (final_maxlen == final_rise_delay.maxlen) {
-		sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
-		sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
-		sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
-		if (host->top_base != NULL) {
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY,
-				      final_rise_delay.final_phase);
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY,
-				      final_rise_delay.final_phase);
-		} else {
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY,
-				      final_rise_delay.final_phase);
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY,
-				      final_rise_delay.final_phase);
-		}
 		final_delay = final_rise_delay.final_phase;
+		final_edge = 0;
 	} else {
-		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
-		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
-		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
-		if (host->top_base != NULL) {
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY,
-				      final_fall_delay.final_phase);
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY,
-				      final_fall_delay.final_phase);
-		} else {
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY,
-				      final_fall_delay.final_phase);
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY,
-				      final_fall_delay.final_phase);
-		}
 		final_delay = final_fall_delay.final_phase;
+		final_edge = 1;
 	}
+	msdc_set_final_window(host, final_delay, final_edge);
 
 	dev_info(host->dev, "Final cmd/data pad delay: %x\n", final_delay);
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	/* dump the debug message of rise/fall window */
-	if (NEED_TUNE_RSP_DAT(host)) {
-		dev_info(host->dev, "[%d]CALIB_RSLT: rise 0x%x,%d/%d, fall 0x%x,%d/%d\n", mmc->index,
-			rise_delay, final_rise_delay.final_phase, final_rise_delay.maxlen,
-			fall_delay, debug_fall_delay.final_phase, debug_fall_delay.maxlen);
-		SET_RSP_DAT_TUNED(host);
-	}
-#endif
 	return final_delay == 0xff ? -EIO : 0;
+}
+
+static u64 msdc_tune_vcore(struct mmc_host *mmc, u32 opcode,
+			   enum vcore_opp vcore, u8 edge)
+{
+	struct msdc_host *host = mmc_priv(mmc);
+	u64 pass_window = 0;
+	int err;
+	int i;
+
+	msdc_set_cmd_delay(host, 0, 0);
+	msdc_set_data_delay(host, 0, 0);
+	msdc_set_cmd_delay(host, 0, 1);
+	msdc_set_data_delay(host, 0, 1);
+
+	pm_qos_update_request(&host->qos_list.msdc_pm_qos, vcore);
+	dev_info(host->dev, "PM_QOS_VCORE_OPP: 0x%x\n",
+		 pm_qos_request(PM_QOS_VCORE_OPP));
+
+	sdr_set_field(host->base + MSDC_PATCH_BIT, MSDC_INT_DAT_LATCH_CK_SEL,
+		      host->latch_ck);
+	sdr_set_field(host->base + MSDC_IOCON, MSDC_IOCON_RSPL, edge);
+	sdr_set_field(host->base + MSDC_IOCON, MSDC_IOCON_DSPL, edge);
+	sdr_set_field(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL, edge);
+	for (i = 0 ; i < PAD_DELAY_MAX; i++) {
+		msdc_set_cmd_delay(host, i, 0);
+		msdc_set_data_delay(host, i, 0);
+		err = mmc_send_tuning(mmc, opcode, NULL);
+		if (!err)
+			pass_window |= (1ULL << i);
+	}
+
+	if (host->dev_comp->tune_64_step) {
+		for (i = 0 ; i < PAD_DELAY_MAX; i++) {
+			msdc_set_cmd_delay(host, i, 1);
+			msdc_set_data_delay(host, i, 1);
+			err = mmc_send_tuning(mmc, opcode, NULL);
+			if (!err)
+				pass_window |= (1ULL << (i + 32));
+		}
+	}
+
+	pm_qos_update_request(&host->qos_list.msdc_pm_qos, VCORE_OPP_UNREQ);
+
+	dev_info(host->dev, "VCORE_OPP: %d, pass_window: [0x%016llx]\n",
+		 vcore, pass_window);
+
+	return pass_window;
+}
+
+static u64 msdc_merge_window(struct mmc_host *mmc, u32 opcode, u8 edge)
+{
+	struct msdc_host *host = mmc_priv(mmc);
+	int i;
+
+	for (i = 0; i < host->dev_comp->vcore_gears; i++)
+		host->qos_list.window[i] = -1ULL;
+	host->qos_list.final_window = -1ULL;
+
+	for (i = 0; i < host->dev_comp->vcore_gears; i++)
+		host->qos_list.window[i] = msdc_tune_vcore(mmc, opcode,
+							   VCORE_OPP_0 + i,
+							   edge);
+	for (i = 0; i < host->dev_comp->vcore_gears; i++)
+		host->qos_list.final_window &= host->qos_list.window[i];
+
+	return host->qos_list.final_window;
+}
+
+static int msdc_tune_vcore_fs(struct mmc_host *mmc, u32 opcode)
+{
+	struct msdc_host *host = mmc_priv(mmc);
+	struct timeval tm_s, tm_e;
+	unsigned int tm_val = 0;
+	u64 rise_window, fall_window;
+	struct msdc_delay_phase rise_delay, fall_delay = {0,};
+	u8 final_maxlen, final_phase, final_edge = 0;
+
+	do_gettimeofday(&tm_s);
+
+	rise_window = msdc_merge_window(mmc, opcode, 0);
+	rise_delay = get_best_delay(host, rise_window);
+	if (rise_delay.maxlen >= 20)
+		goto skip_fall;
+
+	fall_window = msdc_merge_window(mmc, opcode, 1);
+	fall_delay = get_best_delay(host, fall_window);
+
+skip_fall:
+	final_maxlen = max(rise_delay.maxlen, fall_delay.maxlen);
+	if (likely(final_maxlen == rise_delay.maxlen)) {
+		final_phase = rise_delay.final_phase;
+	} else {
+		final_edge = 1;
+		final_phase = fall_delay.final_phase;
+	}
+	msdc_set_final_window(host, final_phase, final_edge);
+
+	do_gettimeofday(&tm_e);
+	tm_val = (tm_e.tv_sec - tm_s.tv_sec) * 1000
+		+ (tm_e.tv_usec - tm_s.tv_usec) / 1000;
+
+	dev_info(host->dev, "Calibration cost: %d ms\n", tm_val);
+	/* if maxlen <= 12, consider it as fail */
+	return final_maxlen > 12 ? 0 : -EIO;
 }
 
 static int msdc_tune_response(struct mmc_host *mmc, u32 opcode)
 {
 	struct msdc_host *host = mmc_priv(mmc);
-	u32 rise_delay = 0, fall_delay = 0;
+	u64 rise_delay = 0, fall_delay = 0;
 	struct msdc_delay_phase final_rise_delay, final_fall_delay = { 0, };
 	struct msdc_delay_phase internal_delay_phase = { 0, };
 	u8 final_delay, final_maxlen;
@@ -2211,9 +2111,6 @@ static int msdc_tune_response(struct mmc_host *mmc, u32 opcode)
 	u32 tune_reg = host->dev_comp->pad_tune_reg;
 	int cmd_err;
 	int i, j;
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	struct msdc_delay_phase debug_fall_delay = { 0, };
-#endif
 
 	if (mmc->ios.timing == MMC_TIMING_MMC_HS200 ||
 	    mmc->ios.timing == MMC_TIMING_UHS_SDR104)
@@ -2223,12 +2120,7 @@ static int msdc_tune_response(struct mmc_host *mmc, u32 opcode)
 
 	sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
 	for (i = 0 ; i < PAD_DELAY_MAX; i++) {
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY, i);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY, i);
+		msdc_set_cmd_delay(host, i, 0);
 		/*
 		 * Using the same parameters, it may sometimes pass the test,
 		 * but sometimes it may fail. To make sure the parameters are
@@ -2237,30 +2129,22 @@ static int msdc_tune_response(struct mmc_host *mmc, u32 opcode)
 		for (j = 0; j < 3; j++) {
 			mmc_send_tuning(mmc, opcode, &cmd_err);
 			if (!cmd_err) {
-				rise_delay |= (1 << i);
+				rise_delay |= (1ULL << i);
 			} else {
-				rise_delay &= ~(1 << i);
+				rise_delay &= ~(1ULL << i);
 				break;
 			}
 		}
 	}
 	final_rise_delay = get_best_delay(host, rise_delay);
 	/* if rising edge has enough margin, then do not scan falling edge */
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	if ((final_rise_delay.maxlen >= 12) && !NEED_TUNE_RSP(host))
-#else
-	if (final_rise_delay.maxlen >= 12)
-#endif
+	if (final_rise_delay.maxlen >= 12 ||
+	    (final_rise_delay.start == 0 && final_rise_delay.maxlen >= 4))
 		goto skip_fall;
 
 	sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
 	for (i = 0; i < PAD_DELAY_MAX; i++) {
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY, i);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY, i);
+		msdc_set_cmd_delay(host, i, 0);
 		/*
 		 * Using the same parameters, it may sometimes pass the test,
 		 * but sometimes it may fail. To make sure the parameters are
@@ -2269,19 +2153,14 @@ static int msdc_tune_response(struct mmc_host *mmc, u32 opcode)
 		for (j = 0; j < 3; j++) {
 			mmc_send_tuning(mmc, opcode, &cmd_err);
 			if (!cmd_err) {
-				fall_delay |= (1 << i);
+				fall_delay |= (1ULL << i);
 			} else {
-				fall_delay &= ~(1 << i);
+				fall_delay &= ~(1ULL << i);
 				break;
 			}
 		}
 	}
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	if (NEED_TUNE_RSP(host))
-		debug_fall_delay = get_best_delay(host, fall_delay);
-	if (final_rise_delay.maxlen < 12)
-#endif
-		final_fall_delay = get_best_delay(host, fall_delay);
+	final_fall_delay = get_best_delay(host, fall_delay);
 
 skip_fall:
 	final_maxlen = max(final_rise_delay.maxlen, final_fall_delay.maxlen);
@@ -2289,27 +2168,13 @@ skip_fall:
 		final_maxlen = final_fall_delay.maxlen;
 	if (final_maxlen == final_rise_delay.maxlen) {
 		sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY,
-				      final_rise_delay.final_phase);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY,
-				      final_rise_delay.final_phase);
 		final_delay = final_rise_delay.final_phase;
 	} else {
 		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CMD,
-				      PAD_CMD_RXDLY,
-				      final_fall_delay.final_phase);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_CMDRDLY,
-				      final_fall_delay.final_phase);
 		final_delay = final_fall_delay.final_phase;
 	}
+	msdc_set_cmd_delay(host, final_delay, 0);
+
 	if (host->dev_comp->async_fifo || host->hs200_cmd_int_delay)
 		goto skip_internal;
 
@@ -2318,30 +2183,21 @@ skip_fall:
 			      MSDC_PAD_TUNE_CMDRRDLY, i);
 		mmc_send_tuning(mmc, opcode, &cmd_err);
 		if (!cmd_err)
-			internal_delay |= (1 << i);
+			internal_delay |= (1ULL << i);
 	}
-	dev_dbg(host->dev, "Final internal delay: 0x%x\n", internal_delay);
-	internal_delay_phase = get_best_delay(host, internal_delay);
+	dev_info(host->dev, "Final internal delay: 0x%x\n", internal_delay);
+	internal_delay_phase = get_best_delay(host, (u64)internal_delay);
 	sdr_set_field(host->base + tune_reg, MSDC_PAD_TUNE_CMDRRDLY,
 		      internal_delay_phase.final_phase);
 skip_internal:
-	dev_dbg(host->dev, "Final cmd pad delay: %x\n", final_delay);
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	/* dump the debug message of rise/fall window, note that internal is meaningless for us */
-	if (NEED_TUNE_RSP(host)) {
-		dev_info(host->dev, "[%d]CALIB_CMD: rise 0x%x,%d/%d, fall 0x%x,%d/%d\n", mmc->index,
-			rise_delay, final_rise_delay.final_phase, final_rise_delay.maxlen,
-			fall_delay, debug_fall_delay.final_phase, debug_fall_delay.maxlen);
-		SET_RSP_TUNED(host);
-	}
-#endif
+	dev_info(host->dev, "Final cmd pad delay: %x\n", final_delay);
 	return final_delay == 0xff ? -EIO : 0;
 }
 
 static int hs400_tune_response(struct mmc_host *mmc, u32 opcode)
 {
 	struct msdc_host *host = mmc_priv(mmc);
-	u32 cmd_delay = 0;
+	u64 cmd_delay = 0;
 	struct msdc_delay_phase final_cmd_delay = { 0,};
 	u8 final_delay;
 	int cmd_err;
@@ -2371,9 +2227,9 @@ static int hs400_tune_response(struct mmc_host *mmc, u32 opcode)
 		for (j = 0; j < 3; j++) {
 			mmc_send_tuning(mmc, opcode, &cmd_err);
 			if (!cmd_err) {
-				cmd_delay |= (1 << i);
+				cmd_delay |= (1ULL << i);
 			} else {
-				cmd_delay &= ~(1 << i);
+				cmd_delay &= ~(1ULL << i);
 				break;
 			}
 		}
@@ -2383,7 +2239,7 @@ static int hs400_tune_response(struct mmc_host *mmc, u32 opcode)
 		      final_cmd_delay.final_phase);
 	final_delay = final_cmd_delay.final_phase;
 
-	dev_dbg(host->dev, "Final cmd pad delay: %x\n", final_delay);
+	dev_info(host->dev, "Final cmd pad delay: %x\n", final_delay);
 	return final_delay == 0xff ? -EIO : 0;
 }
 
@@ -2393,94 +2249,48 @@ static int msdc_tune_data(struct mmc_host *mmc, u32 opcode)
 	u32 rise_delay = 0, fall_delay = 0;
 	struct msdc_delay_phase final_rise_delay, final_fall_delay = { 0, };
 	u8 final_delay, final_maxlen;
-	u32 tune_reg = host->dev_comp->pad_tune_reg;
 	int i, ret;
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	struct msdc_delay_phase debug_fall_delay = { 0, };
-#endif
 
 	sdr_set_field(host->base + MSDC_PATCH_BIT, MSDC_INT_DAT_LATCH_CK_SEL,
 		      host->latch_ck);
 	sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 	sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
 	for (i = 0 ; i < PAD_DELAY_MAX; i++) {
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY, i);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY, i);
+		msdc_set_data_delay(host, i, 0);
 		ret = mmc_send_tuning(mmc, opcode, NULL);
 		if (!ret)
-			rise_delay |= (1 << i);
+			rise_delay |= (1ULL << i);
 	}
 	final_rise_delay = get_best_delay(host, rise_delay);
 	/* if rising edge has enough margin, then do not scan falling edge */
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	if ((final_rise_delay.maxlen >= 12) && !NEED_TUNE_DAT(host))
-#else
-	if (final_rise_delay.maxlen >= 12)
-#endif
+	if (final_rise_delay.maxlen >= 12 ||
+	    (final_rise_delay.start == 0 && final_rise_delay.maxlen >= 4))
 		goto skip_fall;
 
 	sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 	sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
 	for (i = 0; i < PAD_DELAY_MAX; i++) {
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY, i);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY, i);
+		msdc_set_data_delay(host, i, 0);
 		ret = mmc_send_tuning(mmc, opcode, NULL);
 		if (!ret)
-			fall_delay |= (1 << i);
+			fall_delay |= (1ULL << i);
 	}
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	if (NEED_TUNE_DAT(host))
-		debug_fall_delay = get_best_delay(host, fall_delay);
-	if (final_rise_delay.maxlen < 12)
-#endif
-		final_fall_delay = get_best_delay(host, fall_delay);
+	final_fall_delay = get_best_delay(host, fall_delay);
 
 skip_fall:
 	final_maxlen = max(final_rise_delay.maxlen, final_fall_delay.maxlen);
 	if (final_maxlen == final_rise_delay.maxlen) {
 		sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 		sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY,
-				      final_rise_delay.final_phase);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY,
-				      final_rise_delay.final_phase);
 		final_delay = final_rise_delay.final_phase;
 	} else {
 		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
-		if (host->top_base != NULL)
-			sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
-				      PAD_DAT_RD_RXDLY,
-				      final_fall_delay.final_phase);
-		else
-			sdr_set_field(host->base + tune_reg,
-				      MSDC_PAD_TUNE_DATRRDLY,
-				      final_fall_delay.final_phase);
 		final_delay = final_fall_delay.final_phase;
 	}
+	msdc_set_data_delay(host, final_delay, 0);
 
-	dev_dbg(host->dev, "Final pad delay: %x\n", final_delay);
-#ifdef CONFIG_MMC_TUNE_WINDOW_LOGS
-	/* dump the debug message of rise/fall window */
-	if (NEED_TUNE_DAT(host)) {
-		dev_info(host->dev, "[%d]CALIB_DAT: rise 0x%x,%d/%d, fall 0x%x,%d/%d\n", mmc->index,
-			rise_delay, final_rise_delay.final_phase, final_rise_delay.maxlen,
-			fall_delay, debug_fall_delay.final_phase, debug_fall_delay.maxlen);
-		SET_DAT_TUNED(host);
-	}
-#endif
+	dev_info(host->dev, "Final data pad delay: %x\n", final_delay);
 	return final_delay == 0xff ? -EIO : 0;
 }
 
@@ -2491,19 +2301,28 @@ static int msdc_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	u32 tune_reg = host->dev_comp->pad_tune_reg;
 
 	if (host->dev_comp->tune_resp_data_together) {
-		ret = msdc_tune_resp_data(mmc, opcode);
+		if (host->dev_comp->vcore_fs)
+			ret = msdc_tune_vcore_fs(mmc, opcode);
+		else
+			ret = msdc_tune_resp_data(mmc, opcode);
+
 		if (ret == -EIO)
 			dev_err(host->dev, "Tune cmd/data fail!\n");
 		if (host->hs400_mode) {
 			sdr_clr_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
 			sdr_clr_bits(host->base + MSDC_IOCON,
 				     MSDC_IOCON_W_DSPL);
-			if (host->top_base != NULL)
+			if (host->top_base != NULL) {
 				sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
 					      PAD_DAT_RD_RXDLY, 0);
-			else
+				sdr_set_field(host->top_base + EMMC_TOP_CONTROL,
+					      PAD_DAT_RD_RXDLY2, 0);
+			} else {
 				sdr_set_field(host->base + tune_reg,
 					      MSDC_PAD_TUNE_DATRRDLY, 0);
+				sdr_set_field(host->base + tune_reg + 4,
+					      MSDC_PAD_TUNE_DATRRDLY2, 0);
+			}
 		}
 	} else {
 		if (host->hs400_mode &&
@@ -2519,14 +2338,8 @@ static int msdc_execute_tuning(struct mmc_host *mmc, u32 opcode)
 			ret = msdc_tune_data(mmc, opcode);
 			if (ret == -EIO)
 				dev_err(host->dev, "Tune data fail!\n");
-			if (ret) {
-				host->cmd19_fail++;
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-			if (host->metrics_enable)
-					mod_delayed_work(system_wq, &host->metrics_work, METRICS_DELAY);
-#endif
-			}
 		}
+
 	}
 
 	host->saved_tune_para.iocon = readl(host->base + MSDC_IOCON);
@@ -2573,17 +2386,6 @@ static void msdc_ack_sdio_irq(struct mmc_host *mmc)
 	msdc_enable_sdio_irq(mmc, 1);
 }
 
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-static void msdc_cd_irq(struct mmc_host *mmc)
-{
-	struct msdc_host *host = mmc_priv(mmc);
-
-	host->inserted++;
-	if (host->metrics_enable)
-		mod_delayed_work(system_wq, &host->metrics_work, METRICS_DELAY);
-}
-#endif
-
 static const struct mmc_host_ops mt_msdc_ops = {
 	.post_req = msdc_post_req,
 	.pre_req = msdc_pre_req,
@@ -2598,9 +2400,6 @@ static const struct mmc_host_ops mt_msdc_ops = {
 	.execute_tuning = msdc_execute_tuning,
 	.prepare_hs400_tuning = msdc_prepare_hs400_tuning,
 	.hw_reset = msdc_hw_reset,
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	.cd_irq = msdc_cd_irq,
-#endif
 };
 
 static void msdc_of_property_parse(struct platform_device *pdev,
@@ -2823,10 +2622,6 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	msdc_init_gpd_bd(host, &host->dma);
 	INIT_DELAYED_WORK(&host->req_timeout, msdc_request_timeout);
 	spin_lock_init(&host->lock);
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	host->metrics_enable = true;
-	INIT_DELAYED_WORK(&host->metrics_work, msdc_metrics_work);
-#endif
 
 	platform_set_drvdata(pdev, mmc);
 	msdc_ungate_clock(host);
@@ -2837,15 +2632,12 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	if (ret)
 		goto release;
 
-#ifdef CONFIG_PM_DEVFREQ
-	pm_qos_add_request(&host->pm_qos, PM_QOS_VCORE_OPP,
+	pm_qos_add_request(&host->qos_list.msdc_pm_qos, PM_QOS_VCORE_OPP,
 			   PM_QOS_VCORE_OPP_DEFAULT_VALUE);
-#endif
 	pm_runtime_set_active(host->dev);
 	pm_runtime_set_autosuspend_delay(host->dev, MTK_MMC_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(host->dev);
 	pm_runtime_enable(host->dev);
-	msdc_add_device_attrs(host, msdc_attrs);
 	ret = mmc_add_host(mmc);
 
 	if (ret)
@@ -2885,7 +2677,6 @@ static int msdc_drv_remove(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, NULL);
 	mmc_remove_host(host->mmc);
-	msdc_remove_device_attrs(host, msdc_attrs);
 	msdc_deinit_hw(host);
 	msdc_gate_clock(host);
 
@@ -2897,9 +2688,7 @@ static int msdc_drv_remove(struct platform_device *pdev)
 	dma_free_coherent(&pdev->dev, MAX_BD_NUM * sizeof(struct mt_bdma_desc),
 			host->dma.bd, host->dma.bd_addr);
 
-#ifdef CONFIG_PM_DEVFREQ
-	pm_qos_remove_request(&host->pm_qos);
-#endif
+	pm_qos_remove_request(&host->qos_list.msdc_pm_qos);
 	mmc_free_host(host->mmc);
 
 	return 0;
@@ -2966,9 +2755,6 @@ static int msdc_runtime_suspend(struct device *dev)
 
 	msdc_save_reg(host);
 	msdc_gate_clock(host);
-#ifdef CONFIG_PM_DEVFREQ
-	pm_qos_update_request(&host->pm_qos, VCORE_OPP_UNREQ);
-#endif
 	return 0;
 }
 
@@ -2977,9 +2763,6 @@ static int msdc_runtime_resume(struct device *dev)
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msdc_host *host = mmc_priv(mmc);
 
-#ifdef CONFIG_PM_DEVFREQ
-	pm_qos_update_request(&host->pm_qos, VCORE_OPP_0);
-#endif
 	msdc_ungate_clock(host);
 	msdc_restore_reg(host);
 	return 0;
@@ -2999,14 +2782,10 @@ static int msdc_sys_suspend(struct device *dev)
 
 static int msdc_sys_resume(struct device *dev)
 {
-	struct mmc_host *mmc = dev_get_drvdata(dev);
-	struct msdc_host *host =  mmc_priv(mmc);
 	int ret = pinctrl_pm_select_default_state(dev);
 
 	if (ret)
 		return ret;
-	if (host != NULL)
-		host->pc_suspend++;
 
 	return pm_runtime_force_resume(dev);
 }
@@ -3016,8 +2795,6 @@ static const struct dev_pm_ops msdc_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(msdc_sys_suspend, msdc_sys_resume)
 	SET_RUNTIME_PM_OPS(msdc_runtime_suspend, msdc_runtime_resume, NULL)
 };
-
-
 static struct platform_driver mt_msdc_driver = {
 	.probe = msdc_drv_probe,
 	.remove = msdc_drv_remove,

@@ -195,13 +195,8 @@ struct apthermolmt_user *handle, unsigned int limit)
 		mt_ppm_cpu_thermal_protect((final_limit != 0x7FFFFFFF) ?
 							final_limit : 0);
 #else
-#ifdef CONFIG_VIRTUAL_SENSOR_THERMAL
-		thermal_budget_notify((final_limit != 0x7FFFFFFF) ?
-							final_limit : 0);
-#else
 		mt_cpufreq_thermal_protect((final_limit != 0x7FFFFFFF) ?
 							final_limit : 0);
-#endif
 #endif
 		if (time_after(jiffies, timeout))
 			tscpu_warn("blocked in cpu limit %u over 100ms\n",

@@ -323,6 +323,7 @@ static void kbase_pm_hwcnt_disable_worker(struct work_struct *data)
 		 */
 		backend->hwcnt_disabled = true;
 		kbase_pm_update_state(kbdev);
+		kbase_backend_slot_update(kbdev);
 	} else {
 		/* PM state was updated while we were doing the disable,
 		 * so we need to undo the disable we just performed.
@@ -458,8 +459,6 @@ void kbase_hwaccess_pm_halt(struct kbase_device *kbdev)
 	mutex_lock(&kbdev->pm.lock);
 	kbase_pm_do_poweroff(kbdev, false);
 	mutex_unlock(&kbdev->pm.lock);
-
-	kbase_pm_wait_for_poweroff_complete(kbdev);
 }
 
 KBASE_EXPORT_TEST_API(kbase_hwaccess_pm_halt);

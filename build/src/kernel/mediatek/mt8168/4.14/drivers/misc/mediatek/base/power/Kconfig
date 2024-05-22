@@ -36,6 +36,10 @@ config MTK_UNIFY_POWER
 
 config MTK_CM_MGR
 	bool "MTK CM MGR"
+	depends on CPU_FREQ
+	depends on MTK_QOS_SUPPORT
+	depends on PM_DEVFREQ
+	depends on SCHED_HMP && SCHED_MC
 	default n
 	---help---
 	  This kernel config can be used to enable CM MGR. When enable

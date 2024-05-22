@@ -217,7 +217,7 @@ static const int vsim2_idx[] = {
 };
 
 static const int vibr_idx[] = {
-	0, 1, 2, 4, 9, 10, 11, 13,
+	0, 1, 2, 4, 5, 9, 11, 13,
 };
 
 static const int vusb33_idx[] = {

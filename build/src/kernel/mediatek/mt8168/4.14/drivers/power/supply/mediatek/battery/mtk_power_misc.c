@@ -22,8 +22,6 @@
 
 #include <mt-plat/charger_type.h>
 #include <mt-plat/mtk_battery.h>
-#include <mt-plat/mtk_charger.h>
-#include <mt-plat/charger_class.h>
 #else
 #include <string.h>
 #include "simulator_kernel.h"
@@ -31,11 +29,7 @@
 #include <mtk_gauge_time_service.h>
 #include <mach/mtk_battery_property.h>
 #include "mtk_battery_internal.h"
-#include <mt-plat/battery_metrics.h>
 
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-#include <linux/sign_of_life.h>
-#endif
 
 struct shutdown_condition {
 	bool is_overheat;
@@ -43,7 +37,6 @@ struct shutdown_condition {
 	bool is_uisoc_one_percent;
 	bool is_under_shutdown_voltage;
 	bool is_dlpt_shutdown;
-	bool is_low_battery_temp;
 };
 
 struct shutdown_controller {
@@ -58,9 +51,7 @@ struct shutdown_controller {
 	int batidx;
 	int lbat2_h_count;
 	struct mutex lock;
-#ifdef HIGH_BATTERY_TEMP_SHUDOWN
 	struct notifier_block psy_nb;
-#endif
 };
 
 static struct shutdown_controller sdc;
@@ -152,8 +143,6 @@ int set_shutdown_cond(int shutdown_cond)
 	int vbat;
 	struct shutdown_condition *sds;
 	int enable_lbat_shutdown;
-	struct charger_device *chg1_dev = NULL;
-	struct charger_consumer *p_consumer = NULL;
 
 #ifdef SHUTDOWN_CONDITION_LOW_BAT_VOLT
 	enable_lbat_shutdown = 1;
@@ -180,6 +169,7 @@ int set_shutdown_cond(int shutdown_cond)
 
 	if (shutdown_cond_flag == 2 && shutdown_cond != LOW_BAT_VOLT)
 		return 0;
+
 
 	switch (shutdown_cond) {
 	case OVERHEAT:
@@ -248,20 +238,6 @@ int set_shutdown_cond(int shutdown_cond)
 		}
 		break;
 
-	case LOW_BATTERY_TEMP:
-		mutex_lock(&sdc.lock);
-		bm_err("LOW_BATTERY_TEMP shutdown\n");
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_BATTERY);
-#endif
-		sdc.shutdown_status.is_low_battery_temp = true;
-		mutex_unlock(&sdc.lock);
-
-		chg1_dev = get_charger_by_name("primary_chg");
-		p_consumer = charger_manager_get_by_name(&chg1_dev->dev, "charger");
-		charger_manager_enable_dcap(p_consumer, MAIN_CHARGER, true);
-		orderly_poweroff(true);
-		break;
 	default:
 		break;
 	}
@@ -313,7 +289,6 @@ static int shutdown_event_handler(struct shutdown_controller *sdd)
 				now, sdd->pre_time[SOC_ZERO_PERCENT]);
 			polling++;
 			if (duraction.tv_sec >= SHUTDOWN_TIME) {
-				bat_metrics_critical_shutdown();
 				bm_err("soc zero shutdown\n");
 				mutex_unlock(&sdd->lock);
 				kernel_power_off();
@@ -335,7 +310,6 @@ static int shutdown_event_handler(struct shutdown_controller *sdd)
 				now, sdd->pre_time[UISOC_ONE_PERCENT]);
 			polling++;
 			if (duraction.tv_sec >= SHUTDOWN_TIME) {
-				bat_metrics_critical_shutdown();
 				bm_err("uisoc one shutdown\n");
 				mutex_unlock(&sdd->lock);
 				kernel_power_off();
@@ -410,7 +384,6 @@ static int shutdown_event_handler(struct shutdown_controller *sdd)
 				duraction = timespec_sub(
 					now, sdd->pre_time[LOW_BAT_VOLT]);
 				if (duraction.tv_sec >= SHUTDOWN_TIME) {
-					bat_metrics_critical_shutdown();
 					bm_err("low bat shutdown\n");
 					mutex_unlock(&sdd->lock);
 					kernel_power_off();
@@ -500,7 +473,7 @@ static int power_misc_routine_thread(void *arg)
 
 	return 0;
 }
-#ifdef HIGH_BATTERY_TEMP_SHUDOWN
+
 int mtk_power_misc_psy_event(
 	struct notifier_block *nb, unsigned long event, void *v)
 {
@@ -525,22 +498,17 @@ int mtk_power_misc_psy_event(
 
 	return NOTIFY_DONE;
 }
-#endif
+
 void mtk_power_misc_init(struct platform_device *pdev)
 {
 	mutex_init(&sdc.lock);
 	gtimer_init(&sdc.kthread_fgtimer, &pdev->dev, "power_misc");
 	sdc.kthread_fgtimer.callback = power_misc_kthread_fgtimer_func;
 	init_waitqueue_head(&sdc.wait_que);
-#ifdef HIGH_BATTERY_TEMP_SHUDOWN
-	/*
-	 * remove shutdown of BATTERY_SHUTDOWN_TEMPERATURE,because thermal take
-	 * over shutdown of system at high temperature, battery doesn't need to
-	 * do it.
-	 */
+
 	sdc.psy_nb.notifier_call = mtk_power_misc_psy_event;
 	power_supply_reg_notifier(&sdc.psy_nb);
-#endif
+
 	kthread_run(power_misc_routine_thread, &sdc, "power_misc_thread");
 }
 

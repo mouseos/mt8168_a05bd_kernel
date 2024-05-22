@@ -51,18 +51,3 @@ config MTK_RAM_CONSOLE_DRAM_ADDR
 	depends on MTK_RAM_CONSOLE
 	help
 	  DRAM ram_console address.
-config MTK_AEE_SAVE_DEBUGINFO_CONSOLE
-	bool "saving debug info in console buffer"
-	default n
-	depends on MTK_RAM_CONSOLE
-	depends on PSTORE_CONSOLE
-	help
-	  If set this config as yes, will save the debug info
-	  to console buffer in ram_console.
-config MTK_AEE_SAVE_LAST_ATF_LOG_CONSOLE
-        bool "saving last atf log in console buffer"
-        default n
-        depends on MTK_AEE_SAVE_DEBUGINFO_CONSOLE
-        help
-          If set this config as yes, will save the last atf log
-          in ram_console.

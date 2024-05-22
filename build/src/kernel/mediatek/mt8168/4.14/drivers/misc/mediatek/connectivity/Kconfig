@@ -27,14 +27,6 @@ config MTK_COMBO_CHIP_MT6628
 	  is
 	  MT6628
 
-config MTK_COMBO_CHIP_MT7663
-	bool "MT7663"
-	help
-	  this config is used to decided combo chip version
-	  in current platform
-	  is
-	  MT7663
-
 config MTK_COMBO_CHIP_MT7668
 	bool "MT7668"
 	help
@@ -42,6 +34,14 @@ config MTK_COMBO_CHIP_MT7668
 	  in current platform
 	  is
 	  MT7668
+
+config MTK_COMBO_CHIP_MT7663
+	bool "MT7663"
+	help
+	  this config is used to decided combo chip version
+	  in current platform
+	  is
+	  MT7663
 
 config MTK_COMBO_CHIP_MT6630
 	bool "MT6630"
@@ -221,14 +221,6 @@ config MTK_COMBO_BT
 	depends on MTK_COMBO
 	help
 	  MTK BT /dev/stpbt driver for Bluedroid
-
-config MTK_COMBO_PEREGRINE
-	tristate "MediaTek Combo Chip PEREGRINE"
-	depends on MTK_COMBO
-	help
-	  MTK Combo Chip for PEREGRINE
-	  set MTK_COMBO_PEREGRINE=y for PEREGRINE project
-	  unset MTK_COMBO_PEREGRINE for internal platform
 
 config MTK_COMBO_ANT
 	tristate "MediaTek Combo Chip ANT driver"

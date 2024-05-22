@@ -274,7 +274,33 @@ static inline void kbase_free_user_buffer(
 	}
 }
 
-
+/**
+ * kbase_mem_copy_from_extres_page() - Copy pages from external resources.
+ *
+ * @kctx:		kbase context within which the copying is to take place.
+ * @extres_pages:	Pointer to the pages which correspond to the external
+ *			resources from which the copying will take place.
+ * @pages:		Pointer to the pages to which the content is to be
+ *			copied from the provided external resources.
+ * @nr_pages:		Number of pages to copy.
+ * @target_page_nr:	Number of target pages which will be used for copying.
+ * @offset:		Offset into the target pages from which the copying
+ *			is to be performed.
+ * @to_copy:		Size of the chunk to be copied, in bytes.
+ */
+void kbase_mem_copy_from_extres_page(struct kbase_context *kctx,
+		void *extres_page, struct page **pages, unsigned int nr_pages,
+		unsigned int *target_page_nr, size_t offset, size_t *to_copy);
+/**
+ * kbase_mem_copy_from_extres() - Copy from external resources.
+ *
+ * @kctx:	kbase context within which the copying is to take place.
+ * @buf_data:	Pointer to the information about external resources:
+ *		pages pertaining to the external resource, number of
+ *		pages to copy.
+ */
+int kbase_mem_copy_from_extres(struct kbase_context *kctx,
+		struct kbase_debug_copy_buffer *buf_data);
 int kbase_process_soft_job(struct kbase_jd_atom *katom);
 int kbase_prepare_soft_job(struct kbase_jd_atom *katom);
 void kbase_finish_soft_job(struct kbase_jd_atom *katom);

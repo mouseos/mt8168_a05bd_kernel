@@ -96,9 +96,6 @@
 #define WDT_DEBUG_CTL2		0xA0
 #define WDT_DEBUG_CTL2_KEY           (0x55000000)
 
-#define WDT_NONRST2_RPMB_PROG_KEY (1 << 3)
-#define WDT_NONRST2_RPMB_PROG_KEY_EXTEND (1 << 4)
-
 #define DRV_NAME		"mtk-wdt"
 #define DRV_VERSION		"2.0"
 
@@ -203,14 +200,12 @@ static void toprgu_register_reset_controller
 		pr_err("could not register toprgu reset controller: %d\n", ret);
 }
 
-int __attribute__((weak)) rtc_mark_quiescent(int value) { return 0; }
 static int mtk_reset_handler(struct notifier_block *this, unsigned long mode,
 				void *cmd)
 {
 	struct mtk_wdt_dev *mtk_wdt;
 	void __iomem *wdt_base;
 	u32 reg;
-	u32 nonrst_reg2;
 
 	mtk_wdt = container_of(this, struct mtk_wdt_dev, restart_handler);
 	wdt_base = mtk_wdt->wdt_base;
@@ -228,31 +223,16 @@ static int mtk_reset_handler(struct notifier_block *this, unsigned long mode,
 	reg |= WDT_MODE_KEY;
 	iowrite32(reg, wdt_base + WDT_MODE);
 
-	if (cmd && (strcmp(cmd, "rpmbp-eng") == 0)) {
-		nonrst_reg2 = ioread32(wdt_base + WDT_NONRST_REG2);
-		nonrst_reg2 |= WDT_NONRST2_RPMB_PROG_KEY;
-		nonrst_reg2 &= ~WDT_NONRST2_RPMB_PROG_KEY_EXTEND;
-		iowrite32(nonrst_reg2, wdt_base + WDT_NONRST_REG2);
-
+	if (cmd && (strcmp(cmd, "rpmbp") == 0)) {
+		iowrite32(ioread32(wdt_base + WDT_NONRST_REG2) |
+			(1U << 3), wdt_base + WDT_NONRST_REG2);
 		/*
 		 *Set by pass power key flag
 		 *After rpmbp flow, system need enter normal boot flow
 		 */
 		writel(__raw_readl(wdt_base + WDT_MODE) |
 		WDT_MODE_AUTO_START | WDT_MODE_KEY, wdt_base + WDT_MODE);
-	} else if (cmd && (strcmp(cmd, "rpmbp-prod") == 0)) {
-		nonrst_reg2 = ioread32(wdt_base + WDT_NONRST_REG2);
-		nonrst_reg2 |= WDT_NONRST2_RPMB_PROG_KEY;
-		nonrst_reg2 |= WDT_NONRST2_RPMB_PROG_KEY_EXTEND;
-		iowrite32(nonrst_reg2, wdt_base + WDT_NONRST_REG2);
-
-		/*
-		 *Set by pass power key flag
-		 *After rpmbp flow, system need enter normal boot flow
-		 */
-		writel(__raw_readl(wdt_base + WDT_MODE) |
-		WDT_MODE_AUTO_START | WDT_MODE_KEY, wdt_base + WDT_MODE);
-	} else if (cmd && (strstr(cmd, "recovery"))) {
+	} else if (cmd && (strcmp(cmd, "recovery") == 0)) {
 		iowrite32(ioread32(wdt_base + WDT_NONRST_REG2) |
 			(1U << 1), wdt_base + WDT_NONRST_REG2);
 		#ifdef CONFIG_MT6397_MISC
@@ -278,11 +258,6 @@ static int mtk_reset_handler(struct notifier_block *this, unsigned long mode,
 #if defined(CONFIG_MTK_RTC) && defined(CONFIG_MTK_AUTO_POWER_ON_WITH_CHARGER)
 		rtc_mark_enter_kpoc();
 #endif
-	} else if (cmd && !strcmp(cmd, "sw_lprst")) {
-		#ifdef CONFIG_MT6397_MISC
-		#else
-		rtc_mark_sw_lprst();
-		#endif
 	} else {
 		/*
 		 *cmd != NULL means by pass power key reboot,
@@ -290,12 +265,6 @@ static int mtk_reset_handler(struct notifier_block *this, unsigned long mode,
 		 */
 		writel(__raw_readl(wdt_base + WDT_MODE) |
 		WDT_MODE_AUTO_START | WDT_MODE_KEY, wdt_base + WDT_MODE);
-	}
-
-	if (cmd && (strstr(cmd, "quiescent"))) {
-		rtc_mark_quiescent(1);
-	} else {
-		rtc_mark_quiescent(0);
 	}
 
 	if (!arm_pm_restart) {
@@ -407,61 +376,6 @@ void mtk_wdt_force_hw_wdt(void)
 
 }
 
-#if defined(CONFIG_MAGIC_SYSRQ_WD_TEST)
-/*
- *   watchdog mode:
- *   debug_en:   debug module reset enable.
- *   irq:        generate interrupt instead of reset
- *   ext_en:     output reset signal to outside
- *   ext_pol:    polarity of external reset signal
- *   wdt_en:     enable watch dog timer
- */
-bool mtk_wdt_mode_config_for_sysrq(void)
-{
-	u32 reg;
-	struct mtk_wdt_dev *mtk_wdt;
-	void __iomem *wdt_base;
-
-	if (unlikely(wdt_dev == NULL))
-		return false;
-
-	/* get regs base */
-	mtk_wdt = watchdog_get_drvdata(wdt_dev);
-	wdt_base = mtk_wdt->wdt_base;
-
-	reg = ioread32(wdt_base + WDT_MODE);
-
-	/* Bit 0 : Whether enable watchdog or not */
-	reg |= WDT_MODE_EN;
-
-	/* Bit 1 : Configure extern reset signal polarity. */
-	reg &= ~WDT_MODE_EXT_POL_HIGH;
-
-	/* Bit 2 : Whether enable external reset signal */
-	reg |= WDT_MODE_EXRST_EN;
-
-	/* Bit 3 : Whether generating interrupt instead of reset signal */
-	reg &= ~WDT_MODE_IRQ_EN;
-
-	/* Bit 6 : Whether enable debug module reset */
-	reg &= ~WDT_MODE_DUAL_EN;
-
-	reg |= WDT_MODE_KEY | WDT_MODE_AUTO_START;
-
-	iowrite32(reg, wdt_base + WDT_MODE);
-
-	return true;
-
-}
-
-void deactive_mtk_wdd(void)
-{
-	if (unlikely(wdt_dev == NULL))
-		return;
-
-	clear_bit(WDOG_ACTIVE, &wdt_dev->status);
-}
-#endif
 static const struct watchdog_info mtk_wdt_info = {
 	.identity	= DRV_NAME,
 	.options	= WDIOF_SETTIMEOUT |
@@ -520,35 +434,6 @@ static irqreturn_t mtk_wdt_isr(int irq, void *dev_id)
 }
 #endif
 #endif
-
-int mtk_rgu_cfg_dvfsrc(int enable)
-{
-	unsigned int dbg_ctl, latch;
-
-	dbg_ctl = ioread32(toprgu_base + WDT_DEBUG_CTL2);
-	latch = ioread32(toprgu_base + WDT_LATCH_CTL);
-
-	if (enable == 1) {
-		/* enable dvfsrc_en */
-		dbg_ctl |= WDT_DEBUG_CTL_DVFSRC_EN;
-		/* set dvfsrc_latch */
-		latch |= WDT_LATCH_CTL_DVFSRC;
-	} else {
-		/* disable is not allowed */
-		return -1;
-	}
-
-	dbg_ctl |= WDT_DEBUG_CTL2_KEY;
-	iowrite32(dbg_ctl, toprgu_base + WDT_DEBUG_CTL2);
-	latch |= WDT_LATCH_CTL_KEY;
-	iowrite32(latch, toprgu_base + WDT_LATCH_CTL);
-	pr_info("%s: MTK_WDT_DEBUG_CTL2(0x%x)\n",
-		__func__, ioread32(toprgu_base + WDT_DEBUG_CTL2));
-	pr_info("%s: MTK_WDT_LATCH_CTL(0x%x)\n",
-		__func__, ioread32(toprgu_base + WDT_LATCH_CTL));
-	return 0;
-
-}
 
 static int mtk_wdt_probe(struct platform_device *pdev)
 {
@@ -661,9 +546,6 @@ static int mtk_wdt_probe(struct platform_device *pdev)
 	tmp &= ~((1U << 18) | (1U << 0));
 	tmp |= WDT_REQ_IRQ_KEY;
 	iowrite32(tmp, mtk_wdt->wdt_base + WDT_REQ_IRQ_EN);
-
-	/* clear quiescent mode*/
-	rtc_mark_quiescent(0);
 
 	return 0;
 }

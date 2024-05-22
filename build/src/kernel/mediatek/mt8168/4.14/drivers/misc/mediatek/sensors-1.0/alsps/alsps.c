@@ -197,8 +197,6 @@ als_loop:
 	if (true == cxt->is_als_polling_run)
 		mod_timer(&cxt->timer_als,
 			  jiffies + atomic_read(&cxt->delay_als) / (1000 / HZ));
-	else
-		pr_err("skip mod_timer: %d\n", cxt->is_als_polling_run);
 }
 
 static void ps_work_func(struct work_struct *work)
@@ -265,8 +263,6 @@ static void als_poll(unsigned long data)
 
 	if ((obj != NULL) && (obj->is_als_polling_run))
 		schedule_work(&obj->report_als);
-	else
-		pr_err("skip schedule work: %d\n", obj->is_als_polling_run);
 }
 
 static void ps_poll(unsigned long data)
@@ -291,7 +287,6 @@ static struct alsps_context *alsps_context_alloc_object(void)
 	atomic_set(&obj->delay_ps,
 		   200); /* 5Hz,  set work queue delay time 200ms */
 	atomic_set(&obj->wake, 0);
-	atomic_set(&obj->alsps_pause, 0);
 	INIT_WORK(&obj->report_als, als_work_func);
 	INIT_WORK(&obj->report_ps, ps_work_func);
 	init_timer(&obj->timer_als);
@@ -332,20 +327,12 @@ static int als_enable_and_batch(void)
 	struct alsps_context *cxt = alsps_context_obj;
 	int err;
 
-	if (atomic_read(&cxt->alsps_pause)) {
-		cxt->is_als_need_restore_polling = !!cxt->als_enable;
-		pr_err("already in pause, just save enable state: %d\n",
-			cxt->is_als_need_restore_polling);
-		return -1;
-	}
-
 	/* als_power on -> power off */
 	if (cxt->als_power == 1 && cxt->als_enable == 0) {
 		pr_debug("ALSPS disable\n");
 		/* stop polling firstly, if needed */
 		if (cxt->als_ctl.is_report_input_direct == false &&
 		    cxt->is_als_polling_run == true) {
-			cxt->is_als_polling_run = false;
 			smp_mb(); /* for memory barrier */
 			del_timer_sync(&cxt->timer_als);
 			smp_mb(); /* for memory barrier */
@@ -400,14 +387,17 @@ static int als_enable_and_batch(void)
 
 			do_div(mdelay, 1000000);
 			/* defaut max polling delay */
-			if (mdelay < ALS_DELAY_MIN_MS)
-				mdelay = ALS_DELAY_MIN_MS;
+			if (mdelay < 10)
+				mdelay = 10;
 			atomic_set(&cxt->delay_als, mdelay);
 			/* the first sensor start polling timer */
 			if (cxt->is_als_polling_run == false) {
+				mod_timer(&cxt->timer_als,
+					  jiffies +
+						  atomic_read(&cxt->delay_als) /
+							  (1000 / HZ));
 				cxt->is_als_polling_run = true;
 				cxt->is_als_first_data_after_enable = true;
-				mod_timer(&cxt->timer_als, jiffies + atomic_read(&cxt->delay_als) / (1000 / HZ));
 			}
 			pr_debug("als set polling delay %d ms\n",
 				  atomic_read(&cxt->delay_als));
@@ -639,13 +629,6 @@ static int ps_enable_and_batch(void)
 	struct alsps_context *cxt = alsps_context_obj;
 	int err;
 
-	if (atomic_read(&cxt->alsps_pause)) {
-		cxt->is_ps_need_restore_polling = !!cxt->ps_enable;
-		pr_err("already in pause, just save enable state: %d\n",
-			cxt->is_ps_need_restore_polling);
-		return -1;
-	}
-
 	/* ps_power on -> power off */
 	if (cxt->ps_power == 1 && cxt->ps_enable == 0) {
 		pr_debug("PS disable\n");
@@ -653,12 +636,12 @@ static int ps_enable_and_batch(void)
 #if 0
 		if (cxt->ps_ctl.is_report_input_direct == false
 			&& cxt->is_ps_polling_run == true) {
-			cxt->is_ps_polling_run = false;
 			smp_mb();/* for memory barrier */
 			del_timer_sync(&cxt->timer_ps);
 			smp_mb();/* for memory barrier */
 			cancel_work_sync(&cxt->report_ps);
 			cxt->drv_data.ps_data.values[0] = ALSPS_INVALID_VALUE;
+			cxt->is_ps_polling_run = false;
 			pr_debug("ps stop polling done\n");
 		}
 #endif
@@ -711,10 +694,10 @@ static int ps_enable_and_batch(void)
 			atomic_set(&cxt->delay_ps, mdelay);
 			/* the first sensor start polling timer */
 			if (cxt->is_ps_polling_run == false) {
-				cxt->is_ps_polling_run = true;
-				cxt->is_ps_first_data_after_enable = true;
 				mod_timer(&cxt->timer_ps, jiffies +
 					atomic_read(&cxt->delay_ps)/(1000/HZ));
+				cxt->is_ps_polling_run = true;
+				cxt->is_ps_first_data_after_enable = true;
 			}
 		pr_debug("ps delay %d ms\n", atomic_read(&cxt->delay_ps));
 		} else {
@@ -1247,78 +1230,6 @@ int alsps_aal_get_data(void)
 	return 0;
 }
 /* *************************************************** */
-
-int alsps_driver_pause_polling(int en)
-{
-	struct alsps_context *cxt = alsps_context_obj;
-
-	pr_debug("%s: en=%d\n", __func__, en);
-
-	if (en) {
-		atomic_set(&cxt->alsps_pause, 1);
-		if (cxt->is_als_polling_run) {
-			pr_info("%s: freeze als polling thread\n", __func__);
-			cxt->is_als_polling_run = false;
-			cxt->is_als_need_restore_polling = true;
-			smp_mb();/* for memory barrier */
-			del_timer_sync(&cxt->timer_als);
-			smp_mb();/* for memory barrier */
-			cancel_work_sync(&cxt->report_als);
-			cxt->drv_data.als_data.values[0] = ALSPS_INVALID_VALUE;
-		}
-
-		if (cxt->is_ps_polling_run) {
-			pr_info("%s: freeze ps polling thread\n", __func__);
-			cxt->is_ps_polling_run = false;
-			cxt->is_ps_need_restore_polling = true;
-			smp_mb();/* for memory barrier*/
-			del_timer_sync(&cxt->timer_ps);
-			smp_mb();/* for memory barrier*/
-			cancel_work_sync(&cxt->report_ps);
-			cxt->drv_data.ps_data.values[0] = ALSPS_INVALID_VALUE;
-		}
-	} else {
-		atomic_set(&cxt->alsps_pause, 0);
-		if (cxt->is_als_need_restore_polling) {
-			pr_info("%s: restore als polling thread\n", __func__);
-			cxt->is_als_polling_run = true;
-			cxt->is_als_need_restore_polling = false;
-			mod_timer(&cxt->timer_als, jiffies + atomic_read(&cxt->delay_als)/(1000/HZ));
-		}
-
-		if (cxt->is_ps_need_restore_polling) {
-			pr_info("%s: restore ps polling thread\n", __func__);
-			cxt->is_ps_polling_run = true;
-			cxt->is_get_valid_ps_data_after_enable = false;
-			cxt->is_ps_need_restore_polling = false;
-			mod_timer(&cxt->timer_ps, jiffies + atomic_read(&cxt->delay_ps)/(1000/HZ));
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(alsps_driver_pause_polling);
-
-int alsps_driver_query_polling_state(int sensorType)
-{
-	int ret = 0;
-	struct alsps_context *cxt = alsps_context_obj;
-
-	if (sensorType == ID_LIGHT) {
-		if (cxt->is_als_need_restore_polling)
-			ret = 1;
-	} else if (sensorType == ID_PROXIMITY) {
-		if (cxt->is_ps_need_restore_polling)
-			ret = 1;
-	} else {
-		ret = -1;
-	}
-
-	pr_debug("%s: sensorType=%d, ret=%d\n", __func__, sensorType, ret);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(alsps_driver_query_polling_state);
 
 static int alsps_probe(void)
 {

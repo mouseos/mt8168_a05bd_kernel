@@ -996,11 +996,6 @@ static int vidioc_vdec_qbuf(struct file *file, void *priv,
 	}
 
 	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
-	if (buf->index >= vq->num_buffers) {
-		mtk_v4l2_err("[%d] buffer index %d out of range %d",
-			ctx->id, buf->index, vq->num_buffers);
-		return -EINVAL;
-	}
 	vb = vq->bufs[buf->index];
 	vb2_v4l2 = container_of(vb, struct vb2_v4l2_buffer, vb2_buf);
 	mtkbuf = container_of(vb2_v4l2, struct mtk_video_dec_buf, vb);
@@ -1066,7 +1061,7 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 	struct vb2_v4l2_buffer  *vb2_v4l2;
 
 	if (ctx->state == MTK_STATE_ABORT) {
-		mtk_v4l2_debug(1, "[%d] Call on DQBUF after unrecoverable error",
+		mtk_v4l2_err("[%d] Call on DQBUF after unrecoverable error",
 			     ctx->id);
 		return -EIO;
 	}
@@ -1077,11 +1072,6 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 	if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 		ret == 0) {
 		vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
-		if (buf->index >= vq->num_buffers) {
-			mtk_v4l2_err("[%d] buffer index %d out of range %d",
-				ctx->id, buf->index, vq->num_buffers);
-			return -EINVAL;
-		}
 		vb = vq->bufs[buf->index];
 		vb2_v4l2 = container_of(vb, struct vb2_v4l2_buffer, vb2_buf);
 		mtkbuf = container_of(vb2_v4l2, struct mtk_video_dec_buf, vb);
@@ -1757,7 +1747,8 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 	mtkbuf = container_of(vb2_v4l2, struct mtk_video_dec_buf, vb);
 
 	if (!(mtkbuf->flags & NO_CAHCE_CLEAN) &&
-		!(ctx->dec_params.svp_mode)) {
+		!(ctx->dec_params.svp_mode) &&
+		vb->memory == VB2_MEMORY_DMABUF) {
 		if (vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 			struct mtk_vcodec_mem src_mem;
 
@@ -2024,7 +2015,8 @@ static void vb2ops_vdec_buf_finish(struct vb2_buffer *vb)
 	mtkbuf = container_of(vb2_v4l2, struct mtk_video_dec_buf, vb);
 
 	if (!(mtkbuf->flags & NO_CAHCE_INVALIDATE) &&
-		!(ctx->dec_params.svp_mode)) {
+		!(ctx->dec_params.svp_mode) &&
+		vb->memory == VB2_MEMORY_DMABUF) {
 		for (plane = 0; plane < buf->frame_buffer.num_planes; plane++) {
 			struct vdec_fb dst_mem;
 			struct dma_buf_attachment *buf_att;

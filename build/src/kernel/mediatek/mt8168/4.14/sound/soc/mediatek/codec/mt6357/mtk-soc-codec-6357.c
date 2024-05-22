@@ -5560,7 +5560,7 @@ static int Audio_MICBIAS0_Set(struct snd_kcontrol *kcontrol,
 	mutex_lock(&Ana_Power_Mutex);
 	if (ucontrol->value.integer.value[0]) {
 		if (audio_micbias0_on) {
-			pr_debug("%s MICBIAS0 has already been enabled\n", __func__);
+			pr_debug("%s MICBIAS0 has been enabled\n", __func__);
 		} else {
 			audckbufEnable(true);
 			NvregEnable(true);
@@ -5764,7 +5764,7 @@ static void Codec_Loopback_DL_Func_On(int mode)
 
 	switch (mode) {
 	case AUDIO_ANALOG_LOOP_SPEAKER:
-#ifdef USING_LOL_SPEAKER
+#if 1
 		/* Spk connect on LOL */
 		if (mCodec_data->mAudio_Ana_DevicePower[spkL] == false) {
 			Speaker_Amp_Change(true);
@@ -6255,7 +6255,7 @@ static int mt6357_codec_probe(struct snd_soc_codec *codec)
 
 	/* create analog debug file */
 	mt_sco_audio_debugfs = debugfs_create_file(
-		DEBUG_ANA_FS_NAME, S_IFREG | 0644, NULL,
+		DEBUG_ANA_FS_NAME, S_IFREG | 0777, NULL,
 		(void *)DEBUG_ANA_FS_NAME, &mtaudio_ana_debug_ops);
 
 	return 0;

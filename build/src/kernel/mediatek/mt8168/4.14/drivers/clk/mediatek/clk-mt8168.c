@@ -32,27 +32,6 @@ static const struct mtk_fixed_clk top_fixed_clks[] = {
 		  52500000),
 };
 
-static const struct mtk_gate_regs pll_cg_regs = {
-	.set_ofs = 0x204,
-	.clr_ofs = 0x204,
-	.sta_ofs = 0x204,
-};
-
-#define GATE_PLL(_id, _name, _parent, _shift) {	\
-		.id = _id,				\
-		.name = _name,				\
-		.parent_name = _parent,			\
-		.regs = &pll_cg_regs,			\
-		.shift = _shift,			\
-		.ops = &mtk_clk_gate_ops_no_setclr_inv,	\
-	}
-
-static const struct mtk_gate pll_clks[] = {
-	/* PLL */
-	GATE_PLL(CLK_APMIXED_UNIV_EN, "univ_en", "univpll2", 0),
-	GATE_PLL(CLK_APMIXED_USB20_EN, "usb20_en", "univpll", 1),
-};
-
 static const struct mtk_fixed_factor top_divs[] = {
 	FACTOR(CLK_TOP_SYSPLL_D2, "syspll_d2", "mainpll", 1, 2),
 	FACTOR(CLK_TOP_SYSPLL1_D2, "syspll1_d2", "mainpll", 1, 4),
@@ -69,7 +48,7 @@ static const struct mtk_fixed_factor top_divs[] = {
 	FACTOR(CLK_TOP_SYSPLL_D7, "syspll_d7", "mainpll", 1, 7),
 	FACTOR(CLK_TOP_SYSPLL4_D2, "syspll4_d2", "mainpll", 1, 14),
 	FACTOR(CLK_TOP_SYSPLL4_D4, "syspll4_d4", "mainpll", 1, 28),
-	FACTOR(CLK_TOP_UNIVPLL, "univpll", "univ_en", 1, 2),
+	FACTOR(CLK_TOP_UNIVPLL, "univpll", "univpll2", 1, 2),
 	FACTOR(CLK_TOP_UNIVPLL_D2, "univpll_d2", "univpll", 1, 2),
 	FACTOR(CLK_TOP_UNIVPLL1_D2, "univpll1_d2", "univpll", 1, 4),
 	FACTOR(CLK_TOP_UNIVPLL1_D4, "univpll1_d4", "univpll", 1, 8),
@@ -88,7 +67,7 @@ static const struct mtk_fixed_factor top_divs[] = {
 	FACTOR(CLK_TOP_LVDSPLL_D4, "lvdspll_d4", "lvdspll", 1, 4),
 	FACTOR(CLK_TOP_LVDSPLL_D8, "lvdspll_d8", "lvdspll", 1, 8),
 	FACTOR(CLK_TOP_LVDSPLL_D16, "lvdspll_d16", "lvdspll", 1, 16),
-	FACTOR(CLK_TOP_USB20_192M, "usb20_192m_ck", "usb20_en", 1, 1),
+	FACTOR(CLK_TOP_USB20_192M, "usb20_192m_ck", "univpll", 1, 1),
 	FACTOR(CLK_TOP_USB20_192M_D4, "usb20_192m_d4", "usb20_192m_ck", 1, 4),
 	FACTOR(CLK_TOP_USB20_192M_D8, "usb20_192m_d8", "usb20_192m_ck", 1, 8),
 	FACTOR(CLK_TOP_USB20_192M_D16, "usb20_192m_d16", "usb20_192m_ck",
@@ -1118,7 +1097,6 @@ static int clk_mt8168_apmixed_probe(struct platform_device *pdev)
 
 	clk_data = mtk_alloc_clk_data(CLK_APMIXED_NR_CLK);
 
-	mtk_clk_register_gates(node, pll_clks, ARRAY_SIZE(pll_clks), clk_data);
 	mtk_clk_register_plls(node, plls, ARRAY_SIZE(plls), clk_data);
 
 	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);

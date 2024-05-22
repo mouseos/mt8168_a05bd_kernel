@@ -200,9 +200,9 @@ unsigned long ged_gas_query_mode(void)
 unsigned long ged_query_info(GED_INFO eType)
 {
 #ifndef BRING_UP
-	unsigned int gpu_loading = 0;
-	unsigned int gpu_block = 0;
-	unsigned int gpu_idle = 0;
+	unsigned int gpu_loading;
+	unsigned int gpu_block;
+	unsigned int gpu_idle;
 
 	switch (eType) {
 	case GED_LOADING:
@@ -1452,7 +1452,8 @@ GED_ERROR ged_dvfs_probe_signal(int signo)
 	}
 
 	if (t != NULL) {
-		ged_log_buf_print(ghLogBuf_ged_srv, "[GED_K] skip signo %d to ged_srv [%d]", signo, g_probe_pid);
+		/*do_send_sig_info(signo, &info, t, false);*/
+		ged_log_buf_print(ghLogBuf_ged_srv, "[GED_K] send signo %d to ged_srv [%d]", signo, g_probe_pid);
 		return GED_OK;
 	} else {
 		g_probe_pid = GED_NO_UM_SERVICE;

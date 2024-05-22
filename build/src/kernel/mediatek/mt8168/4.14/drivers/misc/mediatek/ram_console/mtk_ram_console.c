@@ -31,7 +31,6 @@
 #include <linux/of_fdt.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/pstore.h>
-#include <linux/pstore_ram.h>
 #include <linux/io.h>
 #include <mt-plat/aee.h>
 #include "ram_console.h"
@@ -508,12 +507,6 @@ static int ram_console_lastk_show(struct ram_console_buffer *buffer,
 			ram_console_clear ?
 			"Clear" : "Not Clear", old_wdt_status);
 
-#ifdef CONFIG_PSTORE_CONSOLE
-
-	pstore_console_show(PSTORE_TYPE_CONSOLE, m, v);
-
-#else
-
 #ifdef CONFIG_OF
 	if (of_chosen) {
 		struct boot_tag_lastpc *tags = (struct boot_tag_lastpc *)
@@ -533,6 +526,9 @@ static int ram_console_lastk_show(struct ram_console_buffer *buffer,
 	}
 #endif
 
+#ifdef CONFIG_PSTORE_CONSOLE
+	pstore_console_show(PSTORE_TYPE_CONSOLE, m, v);
+#else
 	if (buffer->off_console != 0
 	    && buffer->off_linux + ALIGN(sizeof(struct last_reboot_reason),
 					 64) == buffer->off_console
@@ -588,54 +584,11 @@ static int __init ram_console_save_old(struct ram_console_buffer *buffer,
 	return 0;
 }
 
-/* dumping action must be done before calling pstore_mkfile() */
-static void dump_lastpc(void)
-{
-#ifdef CONFIG_OF
-	struct boot_tag_lastpc *tags;
-
-	if (!of_chosen) {
-		pr_err("of_chosen is null\n");
-		return;
-	}
-
-	tags = (struct boot_tag_lastpc *)of_get_property(of_chosen, "atag,lastpc", NULL);
-
-	if (tags) {
-		int i, j;
-
-		for (i = 0; i < 4; i++) {
-			ramoops_append_plat_log("LASTPC CORE%d: ", i);
-			for (j = 0; j < 8; j++)
-				ramoops_append_plat_log("0x%08X ", tags->lastpc[i][j]);
-			ramoops_append_plat_log("\n");
-		}
-		pr_info("Dump lastpc info\n");
-	}
-#endif
-}
-
-static void dump_platform_debug_info(void)
-{
-	if (ram_console_buffer == NULL) {
-		pr_notice("dump_spm_latch_info: ram console buffer is NULL!\n");
-		return;
-	}
-#ifdef CONFIG_MTK_AEE_SAVE_DEBUGINFO_CONSOLE
-	ramoops_append_plat_log("\n-- platform_debug info --\n");
-	ramoop_append_buffer((char *)ram_console_buffer + ram_console_buffer->off_console,
-				ram_console_buffer->log_size);
-#endif
-}
-
 static int __init ram_console_init(struct ram_console_buffer *buffer,
 		size_t buffer_size)
 {
 	ram_console_buffer = buffer;
 	buffer->sz_buffer = buffer_size;
-
-	dump_lastpc();
-	dump_platform_debug_info();
 
 	if (buffer->sig != REBOOT_REASON_SIG  ||
 			ram_console_check_header(buffer)) {
@@ -656,12 +609,8 @@ static int __init ram_console_init(struct ram_console_buffer *buffer,
 	buffer->off_console = buffer->off_linux +
 		ALIGN(sizeof(struct last_reboot_reason), 64);
 	buffer->sz_console = buffer->sz_buffer - buffer->off_console;
-#ifndef CONFIG_MTK_AEE_SAVE_DEBUGINFO_CONSOLE
-	/* off_console is used for saving latch spm info in lk stage */
 	buffer->log_start = 0;
 	buffer->log_size = 0;
-#endif
-
 	memset_io((void *)buffer + buffer->off_linux, 0,
 			buffer_size - buffer->off_linux);
 	ram_console_init_desc(buffer->off_linux);
@@ -3302,8 +3251,8 @@ void aee_rr_show_last_bus(struct seq_file *m)
 
 	if (reg_buf) {
 		if (mt_lastbus_dump) {
-			mt_lastbus_dump(reg_buf);
-			seq_printf(m, "%s\n", reg_buf);
+			if (mt_lastbus_dump(reg_buf) == 0)
+				seq_printf(m, "%s\n", reg_buf);
 		}
 		kfree(reg_buf);
 	}

@@ -76,10 +76,7 @@
  * RTC_SPAR0:
  *     bit 0 - 5 : SEC in power-on time
  *     bit 6	 : 32K less bit. True:with 32K, False:Without 32K
- *     bit 7     : LP_DET
- *     bit 8     : Enter KPOC
- *     bit 9     : SW LONG PRESS RST
- *     bit 10 - 15: reserved bits
+ *     bit 7 - 15: reserved bits
  */
 
 u16 rtc_spare_reg[RTC_SPAR_NUM][3] = {
@@ -114,8 +111,6 @@ u16 rtc_spare_reg[RTC_SPAR_NUM][3] = {
 	{RTC_AL_HOU, 0xff, 8}
 	,
 	{RTC_SPAR0, 0x1, 8}
-	,
-	{RTC_SPAR0, 0x1, 9}
 };
 
 static int rtc_eosc_cali_td = 8;

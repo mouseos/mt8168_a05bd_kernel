@@ -89,6 +89,9 @@ enum mtk_encode_param {
 	MTK_ENCODE_PARAM_TSVC = (1 << 13),
 	MTK_ENCODE_PARAM_ROI_ON = (1 << 14),
 	MTK_ENCODE_PARAM_NONREFPFREQ = (1 << 15),
+	MTK_ENCODE_PARAM_MAX_REFP_NUM = (1 << 16),
+	MTK_ENCODE_PARAM_REFP_DISTANCE = (1 << 17),
+	MTK_ENCODE_PARAM_REFP_FRMNUM = (1 << 17),
 };
 
 /*
@@ -210,6 +213,9 @@ struct mtk_enc_params {
 	unsigned int    tsvc;
 	unsigned int    roion;
 	unsigned int    nonrefpfreq;
+	unsigned int    maxrefpnum;
+	unsigned int    refpdistance;
+	unsigned int    refpfrmnum;
 };
 
 /*
@@ -252,6 +258,9 @@ struct venc_enc_param {
 	unsigned int svp_mode;
 	unsigned int tsvc;
 	unsigned int nonrefpfreq;
+	unsigned int maxrefpnum;
+	unsigned int refpdistance;
+	unsigned int refpfrmnum;
 };
 
 /*
@@ -298,7 +307,8 @@ struct venc_frm_buf {
  * @decode_work: worker for the decoding
  * @encode_work: worker for the encoding
  * @last_decoded_picinfo: pic information get from latest decode
- * @empty_flush_buf: a fake size-0 capture buffer that indicates flush
+ * @dec_flush_buf: a fake size-1 output buffer that indicates flush
+ * @enc_flush_buf: a fake size-1 output buffer that indicates flush
  * @oal_vcodec: 1: oal encoder, 0:non-oal encoder
  * @pend_src_buf: pending source buffer
  *
@@ -432,6 +442,7 @@ struct mtk_vcodec_dev {
 	struct mtk_vcodec_pm pm;
 	unsigned int dec_capability;
 	unsigned int enc_capability;
+
 	bool is_codec_suspending;
 };
 

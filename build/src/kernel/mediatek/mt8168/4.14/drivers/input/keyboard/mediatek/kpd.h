@@ -76,7 +76,5 @@ extern atomic_t vol_down_long_press_flag;
 #define kpd_print(fmt, arg...)	do {} while (0)
 #define kpd_info(fmt, arg...)	do {} while (0)
 #endif
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-u32 kpd_get_linux_key_code(u32 keycode, bool pressed);
-#endif
+
 #endif				/* __KPD_H__ */

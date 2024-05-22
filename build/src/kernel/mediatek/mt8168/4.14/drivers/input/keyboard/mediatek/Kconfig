@@ -92,11 +92,3 @@ config LONG_PRESS_MODE_EN
 
 	  The memory dump key includes power key,homerst key and
 	  volume down key,and used for debug purpose.
-
-config KPD_VOLUME_KEY_SWAP
-       bool "Swap volume up/down key"
-       default n
-       ---help---
-         Say Y here if you want to swap volume up/down key.
-         If unuse, say N.
-

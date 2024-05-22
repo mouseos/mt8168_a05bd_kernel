@@ -17,18 +17,14 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/delay.h>
-#include <linux/syscore_ops.h>
 
 #include "inc/mt6370_pmu.h"
 #include "inc/mt6370_pmu_core.h"
-#include "inc/mt6370_pmu_charger.h"
 
 struct mt6370_pmu_core_data {
 	struct mt6370_pmu_chip *chip;
 	struct device *dev;
 };
-
-static struct mt6370_pmu_core_data *g_core_data;
 
 static irqreturn_t mt6370_pmu_otp_irq_handler(int irq, void *data)
 {
@@ -186,22 +182,6 @@ static int mt6370_pmu_core_reset(struct mt6370_pmu_core_data *core_data)
 				    MT6370_PMU_REG_DBCTRL2, 0x32);
 }
 
-static void mt6370_pmu_core_shutdown(void)
-{
-	int ret;
-
-	ret = mt6370_pmu_core_reset(g_core_data);
-	if (ret < 0)
-		dev_err(g_core_data->dev, "pmu core reset fail\n");
-	if (mtk_chr_is_dcap_enable())
-		mt6370_pmu_reg_clr_bit(g_core_data->chip, MT6370_PMU_REG_CHGCTRL2, MT6370_MASK_CHG_EN);
-	dev_info(g_core_data->dev, "pmu core shutdown.\n");
-}
-
-static struct syscore_ops mt6370_syscore_ops = {
-	.shutdown = mt6370_pmu_core_shutdown,
-};
-
 static int mt6370_pmu_core_probe(struct platform_device *pdev)
 {
 	struct mt6370_pmu_core_platdata *pdata = dev_get_platdata(&pdev->dev);
@@ -235,13 +215,11 @@ static int mt6370_pmu_core_probe(struct platform_device *pdev)
 	core_data->dev = &pdev->dev;
 	platform_set_drvdata(pdev, core_data);
 
-	g_core_data = core_data;
 	ret = mt6370_pmu_core_init_register(core_data);
 	if (ret < 0)
 		goto out_init_reg;
 
 	mt6370_pmu_core_irq_register(pdev);
-	register_syscore_ops(&mt6370_syscore_ops);
 	dev_info(&pdev->dev, "%s successfully\n", __func__);
 	return 0;
 out_init_reg:
@@ -256,6 +234,16 @@ static int mt6370_pmu_core_remove(struct platform_device *pdev)
 
 	dev_info(core_data->dev, "%s successfully\n", __func__);
 	return 0;
+}
+
+static void mt6370_pmu_core_shutdown(struct platform_device *pdev)
+{
+	struct mt6370_pmu_core_data *core_data = platform_get_drvdata(pdev);
+	int ret;
+
+	ret = mt6370_pmu_core_reset(core_data);
+	if (ret < 0)
+		dev_err(core_data->dev, "pmu core reset fail\n");
 }
 
 static const struct of_device_id mt_ofid_table[] = {
@@ -278,6 +266,7 @@ static struct platform_driver mt6370_pmu_core = {
 	},
 	.probe = mt6370_pmu_core_probe,
 	.remove = mt6370_pmu_core_remove,
+	.shutdown = mt6370_pmu_core_shutdown,
 	.id_table = mt_id_table,
 };
 module_platform_driver(mt6370_pmu_core);

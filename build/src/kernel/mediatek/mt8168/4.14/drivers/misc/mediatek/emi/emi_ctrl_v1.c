@@ -23,7 +23,7 @@
 
 #include <mt_emi.h>
 #include "emi_ctrl_v1.h"
-/* #include <mtk_dramc.h> */
+#include <mtk_dramc.h>
 
 static void __iomem *CEN_EMI_BASE;
 static void __iomem *CHN_EMI_BASE[MAX_CH];
@@ -48,11 +48,11 @@ static int ddr_info_show(struct seq_file *m, void *v)
 	ddr_info = ((density >> 2) & 0xF00) | get_dram_mr(5);
 
 	ret += snprintf(buf + ret, sizeof(buf) - ret,
-		"ddr_info:	   0x%x\n", ddr_info);
+		"ddr_info:     0x%x\n", ddr_info);
 	ret += snprintf(buf + ret, sizeof(buf) - ret,
 		"DRAM density: %d MB\n", density);
 	ret += snprintf(buf + ret, sizeof(buf) - ret,
-		"vendor ID:	   0x%x\n", get_dram_mr(5));
+		"vendor ID:    0x%x\n", get_dram_mr(5));
 
 	seq_write(m, buf, ret);
 
@@ -204,7 +204,6 @@ static int emi_probe(struct platform_device *pdev)
 static int __init emi_ctrl_init(void)
 {
 	int ret;
-//	int i;
 	struct device_node *node;
 
 	/* register EMI ctrl interface */
@@ -256,8 +255,7 @@ module_exit(emi_ctrl_exit);
 
 unsigned int get_dram_type(void)
 {
-	/* return get_ddr_type(); */
-	return 0;
+	return get_ddr_type();
 }
 
 unsigned int get_dram_mr(unsigned int index)

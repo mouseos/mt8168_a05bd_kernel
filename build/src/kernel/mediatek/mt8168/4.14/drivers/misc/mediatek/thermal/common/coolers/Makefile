@@ -14,7 +14,6 @@ ccflags-y  += -I$(srctree)/drivers/misc/mediatek/thermal/common/inc/
 ccflags-y  += -I$(srctree)/drivers/power/mediatek/
 ccflags-y  += -I$(srctree)/drivers/misc/mediatek/base/power/eem_v1/inc/
 ccflags-y  += -I$(srctree)/drivers/misc/mediatek/dfrc/
-ccflags-y  += -I$(srctree)/drivers/thermal/
 ifeq ($(CONFIG_MTK_TINYSYS_SSPM_SUPPORT),y)
 ccflags-y  += -I$(srctree)/drivers/misc/mediatek/sspm/
 ccflags-y  += -I$(srctree)/drivers/misc/mediatek/sspm/$(MTK_PLATFORM)
@@ -147,8 +146,6 @@ ifeq ($(CONFIG_MTK_THERMAL_PA_VIA_ATCMD),y)
     obj-$(CONFIG_THERMAL) += mtk_cooler_mutt.o
 endif
 obj-$(CONFIG_THERMAL) += mtk_cooler_fps.o
-
-ifneq ($(CONFIG_ARCH_MTK_PROJECT), "onyx")
 ifeq ($(CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT),y)
 	obj-$(CONFIG_THERMAL) += mtk_cooler_bcct_v1.o
 else
@@ -160,7 +157,6 @@ else
 	else
 		obj-$(CONFIG_THERMAL) += mtk_cooler_bcct.o
 	endif
-endif
 endif
 obj-$(CONFIG_THERMAL) += mtk_cooler_atm.o
 obj-$(CONFIG_THERMAL) += mtk_cooler_dtm.o

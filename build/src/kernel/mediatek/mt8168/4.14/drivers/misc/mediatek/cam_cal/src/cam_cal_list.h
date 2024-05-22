@@ -60,7 +60,6 @@ struct stCAM_CAL_LIST_STRUCT {
 	unsigned int slaveID;
 	enum CAM_CAL_CMD_TYPE cmdType;
 	cam_cal_check_func checkFunc;
-	cam_cal_cmd_func readCamCalData;
 };
 
 struct stCAM_CAL_FUNC_STRUCT {
@@ -77,14 +76,6 @@ unsigned int cam_cal_check_mtk_cid(
 		struct i2c_client *client, cam_cal_cmd_func readCamCalData);
 unsigned int cam_cal_check_double_eeprom(struct i2c_client *client,
 		cam_cal_cmd_func readCamCalData);
-
-unsigned int cam_cal_front_read_region(
-	struct i2c_client *client, unsigned int addr,
-	unsigned char *data, unsigned int size);
-
-unsigned int cam_cal_rear_read_region(
-	struct i2c_client *client, unsigned int addr,
-	unsigned char *data, unsigned int size);
 
 /*defined on kd_sensorlist.c*/
 void CAMERA_HW_Get_i2C_BusNum(unsigned int *I2C_Bus_Num);

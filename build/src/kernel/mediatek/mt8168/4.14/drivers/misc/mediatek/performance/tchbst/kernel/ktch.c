@@ -30,7 +30,7 @@
 #define MAX_CORE (8)
 #define MAX_FREQ (20000000)
 #define TARGET_CORE (-1)
-#define TARGET_FREQ (2001000)
+#define TARGET_FREQ (1183000)
 
 struct boost {
 	spinlock_t touch_lock;

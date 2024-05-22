@@ -202,8 +202,6 @@ void DSI_Set_LFR(enum DISP_MODULE_ENUM module, struct cmdqRecStruct *cmdq,
 	unsigned int skip_num);
 enum DSI_STATUS DSI_BIST_Pattern_Test(enum DISP_MODULE_ENUM module,
 	struct cmdqRecStruct *cmdq,	bool enable, unsigned int color);
-enum DSI_STATUS DSI_BIST_SELF_Pattern_Test(enum DISP_MODULE_ENUM module,
-	struct cmdqRecStruct *cmdq, bool enable, unsigned int value);
 int ddp_dsi_start(enum DISP_MODULE_ENUM module, void *cmdq);
 enum DSI_STATUS DSI_DumpRegisters(enum DISP_MODULE_ENUM module, int level);
 void DSI_ForceConfig(int forceconfig);
@@ -225,41 +223,10 @@ int ddp_dsi_read_lcm_cmdq(enum DISP_MODULE_ENUM module,
 		cmdqBackupSlotHandle *read_Slot,
 		struct cmdqRecStruct *cmdq_trigger_handle,
 		struct ddp_lcm_read_cmd_table *read_table);
-int ddp_dsi_read_lcm_test_cmdq(enum DISP_MODULE_ENUM module,
-	cmdqBackupSlotHandle *read_Slot,
-	struct cmdqRecStruct *cmdq_trigger_handle,
-	struct ddp_lcm_read_cmd_table *read_table);
 int ddp_dsi_write_lcm_cmdq(enum DISP_MODULE_ENUM module,
 		struct cmdqRecStruct *cmdq,
 		unsigned char cmd, unsigned char count,
 		unsigned char *para_list);
-
-void ddp_dsi_write_lcm_register_cmdq(enum DISP_MODULE_ENUM module,
-	struct cmdqRecStruct *cmdq,
-	struct LCM_setting_table_V4 *para_tbl,
-	unsigned int index,
-	unsigned char force_update);
-extern int ddp_dsi_read_cabc_cmdq(enum DISP_MODULE_ENUM module,
-	cmdqBackupSlotHandle *read_Slot,
-	struct cmdqRecStruct *cmdq_trigger_handle,
-	struct LCM_setting_table_V4 *para_tbl,
-	unsigned int index);
-extern void primary_display_write_lcm_cmdq(
-	struct LCM_setting_table_V4 *para_tbl,
-	unsigned int size,
-	unsigned char force_update);
-extern int primary_display_read_lcm_cmdq(
-	struct LCM_setting_table_V4 *para_tbl,
-	unsigned int size,
-	unsigned char force_update);
-extern int write_lcm_lp_by_cmdq(
-	struct LCM_setting_table_V4 *para_tbl,
-	unsigned int size,
-	unsigned char force_update);
-extern int read_lcm_lp_by_cmdq(
-	struct LCM_setting_table_V4 *para_tbl,
-	unsigned int size,
-	unsigned char force_update);
 
 #ifdef __cplusplus
 }

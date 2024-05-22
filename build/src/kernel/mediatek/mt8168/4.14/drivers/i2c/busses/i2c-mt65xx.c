@@ -33,6 +33,9 @@
 #include <linux/scatterlist.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/pinctrl/consumer.h>
+
+#include <linux/of_gpio.h>
 
 #define I2C_RS_TRANSFER			(1 << 4)
 #define I2C_HS_NACKERR			(1 << 2)
@@ -49,11 +52,11 @@
 #define I2C_DELAY_LEN			0x0002
 #define I2C_ST_START_CON		0x8001
 #define I2C_FS_START_CON		0x1800
+#define I2C_FS_START_CON_I2C2           0x1201
 #define I2C_TIME_CLR_VALUE		0x0000
 #define I2C_TIME_DEFAULT_VALUE		0x0003
 #define I2C_WRRD_TRANAC_VALUE		0x0002
 #define I2C_RD_TRANAC_VALUE		0x0001
-#define I2C_SLAVE_ADDR_ONLY		BIT(8)
 
 #define I2C_DMA_CON_TX			0x0000
 #define I2C_DMA_CON_RX			0x0001
@@ -167,6 +170,9 @@ struct mtk_i2c {
 	unsigned char auto_restart;
 	bool ignore_restart_irq;
 	const struct mtk_i2c_compatible *dev_comp;
+
+	int scl_gpio;
+	int sda_gpio;
 };
 
 static const struct i2c_adapter_quirks mt6577_i2c_quirks = {
@@ -276,12 +282,77 @@ static void mtk_i2c_clock_disable(struct mtk_i2c *i2c)
 	clk_disable_unprepare(i2c->clk_dma);
 }
 
+static int mtk_i2c_recovery(struct device *dev)
+{
+	struct mtk_i2c *i2c = dev_get_drvdata(dev);
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_gpio;
+	int i;
+
+	pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(pinctrl)) {
+		dev_err(dev, "Cannot find pinctrl!\n");
+		return 0;
+	}
+
+	pins_gpio = pinctrl_lookup_state(pinctrl, "gpio");
+	if (IS_ERR(pins_gpio)) {
+		dev_err(dev, "Cannot find pinctrl gpio!\n");
+		return 0;
+	}
+	pinctrl_select_state(pinctrl, pins_gpio);
+	gpio_request(i2c->sda_gpio, NULL);
+	gpio_direction_input(i2c->sda_gpio);
+	if(gpio_get_value(i2c->sda_gpio) == 0)
+	{
+		printk("I2C%d SDA is low, start i2c recovery...\n", i2c->adap.nr);
+		gpio_request(i2c->scl_gpio, NULL);
+		gpio_direction_output(i2c->scl_gpio,1);
+		udelay(50);
+		for (i = 0; i < 9; i++) {
+			gpio_direction_output(i2c->scl_gpio,1);
+			udelay(4);
+			gpio_direction_output(i2c->scl_gpio,0);
+			udelay(4);
+		}
+		/* 9th clock here, the slave should already
+		   release the SDA, we can set SDA as high to
+		   a NAK.*/
+		gpio_direction_output(i2c->sda_gpio,1);
+		udelay(1); /* Pull up SDA first */
+		gpio_direction_output(i2c->scl_gpio,1);
+		udelay(4);
+		gpio_direction_output(i2c->scl_gpio,0);
+		udelay(4);
+		gpio_direction_output(i2c->sda_gpio,0);
+		udelay(4);
+		gpio_direction_output(i2c->scl_gpio,1);
+		udelay(4);
+		/* Here: SCL is high, and SDA from low to high, it's a
+		 * stop condition */
+		gpio_direction_output(i2c->sda_gpio,1);
+		udelay(4);
+
+		gpio_direction_input(i2c->sda_gpio);
+		if (gpio_get_value(i2c->sda_gpio) == 1) {
+			printk("I2C%d Recovery success\n", i2c->adap.nr);
+		}
+		else {
+			printk("I2C%d Recovery failed, SDA still low!!!\n", i2c->adap.nr);
+		}
+		gpio_free(i2c->scl_gpio);
+	}
+	gpio_free(i2c->sda_gpio);
+	pinctrl_pm_select_default_state(dev);
+
+	return 0;
+}
+
 static void mtk_i2c_init_hw(struct mtk_i2c *i2c)
 {
 	u16 control_reg;
 
 	writel(I2C_DMA_HARD_RST, i2c->pdmabase + OFFSET_RST);
-	udelay(50);
 	writel(I2C_DMA_CLR_FLAG, i2c->pdmabase + OFFSET_RST);
 
 	writew(I2C_SOFT_RST, i2c->base + OFFSET_SOFTRESET);
@@ -471,13 +542,14 @@ static int mtk_i2c_do_transfer(struct mtk_i2c *i2c, struct i2c_msg *msgs,
 	/* set start condition */
 	if (i2c->speed_hz <= 100000)
 		writew(I2C_ST_START_CON, i2c->base + OFFSET_EXT_CONF);
+	else if((i2c->adap.nr == 2) && (msgs->addr == 0x0b))
+	{
+		writew(I2C_FS_START_CON_I2C2, i2c->base + OFFSET_EXT_CONF);
+	}
 	else
 		writew(I2C_FS_START_CON, i2c->base + OFFSET_EXT_CONF);
 
-	if (msgs->len == 0)
-		addr_reg = i2c_8bit_addr_from_msg(msgs) | I2C_SLAVE_ADDR_ONLY;
-	else
-		addr_reg = i2c_8bit_addr_from_msg(msgs);
+	addr_reg = i2c_8bit_addr_from_msg(msgs);
 	writew(addr_reg, i2c->base + OFFSET_SLAVE_ADDR);
 
 	/* Clear interrupt status */
@@ -638,6 +710,7 @@ static int mtk_i2c_do_transfer(struct mtk_i2c *i2c, struct i2c_msg *msgs,
 
 	if (ret == 0) {
 		dev_dbg(i2c->dev, "addr: %x, transfer timeout\n", msgs->addr);
+		mtk_i2c_recovery(i2c->dev);
 		mtk_i2c_init_hw(i2c);
 		return -ETIMEDOUT;
 	}
@@ -664,6 +737,8 @@ static int mtk_i2c_transfer(struct i2c_adapter *adap,
 	if (ret)
 		return ret;
 
+	mtk_i2c_init_hw(i2c);
+
 	i2c->auto_restart = i2c->dev_comp->auto_restart;
 
 	/* checking if we can skip restart and optimize using WRRD mode */
@@ -683,18 +758,8 @@ static int mtk_i2c_transfer(struct i2c_adapter *adap,
 		i2c->ignore_restart_irq = false;
 
 	while (left_num--) {
-		if ((!msgs->buf) || (msgs->len == 0)) {
-			if (!msgs->buf)
-				dev_dbg(i2c->dev, "data buffer is NULL.\n");
-			else
-				dev_dbg(i2c->dev, "Message length is 0.\n");
-			ret = -EINVAL;
-			goto err_exit;
-		}
-
-		if (msgs->len == 0 &&
-		    i2c_check_quirks(&i2c->adap, I2C_AQ_NO_ZERO_LEN)) {
-			dev_dbg(i2c->dev, "Message length is 0.\n");
+		if (!msgs->buf) {
+			dev_dbg(i2c->dev, "data buffer is NULL.\n");
 			ret = -EINVAL;
 			goto err_exit;
 		}
@@ -787,6 +852,9 @@ static int mtk_i2c_parse_dt(struct device_node *np, struct mtk_i2c *i2c)
 	i2c->have_pmic = of_property_read_bool(np, "mediatek,have-pmic");
 	i2c->use_push_pull =
 		of_property_read_bool(np, "mediatek,use-push-pull");
+
+	i2c->scl_gpio = of_get_named_gpio( np, "scl-gpio", 0);
+	i2c->sda_gpio = of_get_named_gpio( np, "sda-gpio", 0);
 
 	return 0;
 }
@@ -912,28 +980,20 @@ static int mtk_i2c_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
+static int mtk_i2c_suspend(struct device *dev)
+{
+	return 0;
+}
+
 static int mtk_i2c_resume(struct device *dev)
 {
-	int ret;
-	struct mtk_i2c *i2c = dev_get_drvdata(dev);
-
-	ret = mtk_i2c_clock_enable(i2c);
-	if (ret) {
-		dev_err(dev, "clock enable failed!\n");
-		return ret;
-	}
-
-	mtk_i2c_init_hw(i2c);
-
-	mtk_i2c_clock_disable(i2c);
+//	mtk_i2c_recovery(dev);
 
 	return 0;
 }
-#endif
 
 static const struct dev_pm_ops mtk_i2c_pm = {
-	SET_SYSTEM_SLEEP_PM_OPS(NULL, mtk_i2c_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(mtk_i2c_suspend, mtk_i2c_resume)
 };
 
 static struct platform_driver mtk_i2c_driver = {

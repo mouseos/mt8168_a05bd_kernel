@@ -63,9 +63,6 @@ updates and generates duplicate page faults as the page table information used b
 #define KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES (1u << KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_LOG2)
 #define KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_HW_ISSUE_8316 (1u << KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_LOG2_HW_ISSUE_8316)
 #define KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_HW_ISSUE_9630 (1u << KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_LOG2_HW_ISSUE_9630)
-
-#define KBASE_MMU_PAGE_ENTRIES 512
-
 /**
  * A CPU mapping
  */
@@ -111,7 +108,6 @@ struct kbase_aliased {
 struct kbase_mem_phy_alloc {
 	struct kref           kref; /* number of users of this alloc */
 	atomic_t              gpu_mappings;
-	atomic_t              kernel_mappings;
 	size_t                nents; /* 0..N */
 	struct tagged_addr    *pages; /* N elements, only 0..nents are valid */
 
@@ -207,30 +203,6 @@ static inline void kbase_mem_phy_alloc_gpu_unmapped(struct kbase_mem_phy_alloc *
 }
 
 /**
- * kbase_mem_phy_alloc_kernel_mapped - Increment kernel_mappings
- * counter for a memory region to prevent commit and flag changes
- *
- * @alloc:  Pointer to physical pages tracking object
- */
-static inline void
-kbase_mem_phy_alloc_kernel_mapped(struct kbase_mem_phy_alloc *alloc)
-{
-	atomic_inc(&alloc->kernel_mappings);
-}
-
-/**
- * kbase_mem_phy_alloc_kernel_unmapped - Decrement kernel_mappings
- * counter for a memory region to allow commit and flag changes
- *
- * @alloc:  Pointer to physical pages tracking object
- */
-static inline void
-kbase_mem_phy_alloc_kernel_unmapped(struct kbase_mem_phy_alloc *alloc)
-{
-	WARN_ON(atomic_dec_return(&alloc->kernel_mappings) < 0);
-}
-
-/**
  * kbase_mem_is_imported - Indicate whether a memory type is imported
  *
  * @type: the memory type
@@ -305,13 +277,8 @@ struct kbase_va_region {
 #define KBASE_REG_SHARE_BOTH        (1ul << 10)
 
 /* Space for 4 different zones */
-#define KBASE_REG_ZONE_MASK         ((KBASE_REG_ZONE_MAX - 1ul) << 11)
-#define KBASE_REG_ZONE(x)           (((x) & (KBASE_REG_ZONE_MAX - 1ul)) << 11)
-#define KBASE_REG_ZONE_IDX(x)       (((x) & KBASE_REG_ZONE_MASK) >> 11)
-
-#if ((KBASE_REG_ZONE_MAX - 1) & 0x3) != (KBASE_REG_ZONE_MAX - 1)
-#error KBASE_REG_ZONE_MAX too large for allocation of KBASE_REG_<...> bits
-#endif
+#define KBASE_REG_ZONE_MASK         (3ul << 11)
+#define KBASE_REG_ZONE(x)           (((x) & 3) << 11)
 
 /* GPU read access */
 #define KBASE_REG_GPU_RD            (1ul<<13)
@@ -344,23 +311,6 @@ struct kbase_va_region {
 
 /* Memory has permanent kernel side mapping */
 #define KBASE_REG_PERMANENT_KERNEL_MAPPING (1ul << 25)
-
-/* GPU VA region has been freed by the userspace, but still remains allocated
- * due to the reference held by CPU mappings created on the GPU VA region.
- *
- * A region with this flag set has had kbase_gpu_munmap() called on it, but can
- * still be looked-up in the region tracker as a non-free region. Hence must
- * not create or update any more GPU mappings on such regions because they will
- * not be unmapped when the region is finally destroyed.
- *
- * Since such regions are still present in the region tracker, new allocations
- * attempted with BASE_MEM_SAME_VA might fail if their address intersects with
- * a region with this flag set.
- *
- * In addition, this flag indicates the gpu_alloc member might no longer valid
- * e.g. in infinite cache simulation.
- */
-#define KBASE_REG_VA_FREED (1ul << 26)
 
 #define KBASE_REG_ZONE_SAME_VA      KBASE_REG_ZONE(0)
 
@@ -399,85 +349,7 @@ struct kbase_va_region {
 	u16 jit_usage_id;
 	/* The JIT bin this allocation came from */
 	u8 jit_bin_id;
-
-	int va_refcnt; /* number of users of this va */
 };
-
-/**
- * kbase_is_ctx_reg_zone - determine whether a KBASE_REG_ZONE_<...> is for a
- *                         context or for a device
- * @zone_bits: A KBASE_REG_ZONE_<...> to query
- *
- * Return: True if the zone for @zone_bits is a context zone, False otherwise
- */
-static inline bool kbase_is_ctx_reg_zone(unsigned long zone_bits)
-{
-	WARN_ON((zone_bits & KBASE_REG_ZONE_MASK) != zone_bits);
-	return (zone_bits == KBASE_REG_ZONE_SAME_VA ||
-		zone_bits == KBASE_REG_ZONE_CUSTOM_VA ||
-		zone_bits == KBASE_REG_ZONE_EXEC_VA);
-}
-
-static inline bool kbase_is_region_free(struct kbase_va_region *reg)
-{
-	return (!reg || reg->flags & KBASE_REG_FREE);
-}
-
-static inline bool kbase_is_region_invalid(struct kbase_va_region *reg)
-{
-	return (!reg || reg->flags & KBASE_REG_VA_FREED);
-}
-
-static inline bool kbase_is_region_invalid_or_free(struct kbase_va_region *reg)
-{
-	/* Possibly not all functions that find regions would be using this
-	 * helper, so they need to be checked when maintaining this function.
-	 */
-	return (kbase_is_region_invalid(reg) ||	kbase_is_region_free(reg));
-}
-
-void kbase_remove_va_region(struct kbase_device *kbdev,
-			    struct kbase_va_region *reg);
-static inline void kbase_region_refcnt_free(struct kbase_device *kbdev,
-					    struct kbase_va_region *reg)
-{
-	/* If region was mapped then remove va region*/
-	if (reg->start_pfn)
-		kbase_remove_va_region(kbdev, reg);
-
-	/* To detect use-after-free in debug builds */
-	KBASE_DEBUG_CODE(reg->flags |= KBASE_REG_FREE);
-	kfree(reg);
-}
-
-static inline struct kbase_va_region *kbase_va_region_alloc_get(
-		struct kbase_context *kctx, struct kbase_va_region *region)
-{
-	lockdep_assert_held(&kctx->reg_lock);
-
-	WARN_ON(!region->va_refcnt);
-
-	/* non-atomic as kctx->reg_lock is held */
-	region->va_refcnt++;
-
-	return region;
-}
-
-static inline struct kbase_va_region *kbase_va_region_alloc_put(
-		struct kbase_context *kctx, struct kbase_va_region *region)
-{
-	lockdep_assert_held(&kctx->reg_lock);
-
-	WARN_ON(region->va_refcnt <= 0);
-	WARN_ON(region->flags & KBASE_REG_FREE);
-
-	/* non-atomic as kctx->reg_lock is held */
-	region->va_refcnt--;
-	if (!region->va_refcnt)
-		kbase_region_refcnt_free(kctx->kbdev, region);
-
-	return NULL;
-}
 
 /* Common functions */
 static inline struct tagged_addr *kbase_get_cpu_phy_pages(
@@ -563,7 +435,6 @@ static inline struct kbase_mem_phy_alloc *kbase_alloc_create(
 
 	kref_init(&alloc->kref);
 	atomic_set(&alloc->gpu_mappings, 0);
-	atomic_set(&alloc->kernel_mappings, 0);
 	alloc->nents = 0;
 	alloc->pages = (void *)(alloc + 1);
 	INIT_LIST_HEAD(&alloc->mappings);
@@ -996,6 +867,7 @@ int kbase_add_va_region(struct kbase_context *kctx, struct kbase_va_region *reg,
 int kbase_add_va_region_rbtree(struct kbase_device *kbdev,
 		struct kbase_va_region *reg, u64 addr, size_t nr_pages,
 		size_t align);
+int kbase_remove_va_region(struct kbase_va_region *reg);
 
 bool kbase_check_alloc_flags(unsigned long flags);
 bool kbase_check_import_flags(unsigned long flags);
@@ -1138,7 +1010,6 @@ void kbase_mmu_disable_as(struct kbase_device *kbdev, int as_nr);
 
 void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat);
 
-#if defined(CONFIG_MALI_VECTOR_DUMP)
 /** Dump the MMU tables to a buffer
  *
  * This function allocates a buffer (of @c nr_pages pages) to hold a dump of the MMU tables and fills it. If the
@@ -1155,7 +1026,6 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat);
  * small)
  */
 void *kbase_mmu_dump(struct kbase_context *kctx, int nr_pages);
-#endif
 
 /**
  * kbase_sync_now - Perform cache maintenance on a memory region
@@ -1531,30 +1401,24 @@ bool kbase_has_exec_va_zone(struct kbase_context *kctx);
 /**
  * kbase_map_external_resource - Map an external resource to the GPU.
  * @kctx:              kbase context.
- * @reg:               External resource to map.
+ * @reg:               The region to map.
  * @locked_mm:         The mm_struct which has been locked for this operation.
  *
- * On successful mapping, the VA region and the gpu_alloc refcounts will be
- * increased, making it safe to use and store both values directly.
- *
- * Return: Zero on success, or negative error code.
+ * Return: The physical allocation which backs the region on success or NULL
+ * on failure.
  */
-int kbase_map_external_resource(struct kbase_context *kctx, struct kbase_va_region *reg,
-			struct mm_struct *locked_mm);
-
+struct kbase_mem_phy_alloc *kbase_map_external_resource(
+		struct kbase_context *kctx, struct kbase_va_region *reg,
+		struct mm_struct *locked_mm);
 
 /**
  * kbase_unmap_external_resource - Unmap an external resource from the GPU.
  * @kctx:  kbase context.
- * @reg:   VA region corresponding to external resource
- *
- * On successful unmapping, the VA region and the gpu_alloc refcounts will
- * be decreased. If the refcount reaches zero, both @reg and the corresponding
- * allocation may be freed, so using them after returning from this function
- * requires the caller to explicitly check their state.
+ * @reg:   The region to unmap or NULL if it has already been released.
+ * @alloc: The physical allocation being unmapped.
  */
-void kbase_unmap_external_resource(struct kbase_context *kctx, struct kbase_va_region *reg);
-
+void kbase_unmap_external_resource(struct kbase_context *kctx,
+		struct kbase_va_region *reg, struct kbase_mem_phy_alloc *alloc);
 
 /**
  * kbase_sticky_resource_init - Initialize sticky resource management.
@@ -1620,77 +1484,5 @@ static inline void kbase_mem_pool_unlock(struct kbase_mem_pool *pool)
  */
 void kbase_mem_evictable_mark_reclaim(struct kbase_mem_phy_alloc *alloc);
 
-
-/**
- * kbase_reg_zone_end_pfn - return the end Page Frame Number of @zone
- * @zone: zone to query
- *
- * Return: The end of the zone corresponding to @zone
- */
-static inline u64 kbase_reg_zone_end_pfn(struct kbase_reg_zone *zone)
-{
-	return zone->base_pfn + zone->va_size_pages;
-}
-
-/**
- * kbase_ctx_reg_zone_init - initialize a zone in @kctx
- * @kctx: Pointer to kbase context
- * @zone_bits: A KBASE_REG_ZONE_<...> to initialize
- * @base_pfn: Page Frame Number in GPU virtual address space for the start of
- *            the Zone
- * @va_size_pages: Size of the Zone in pages
- */
-static inline void kbase_ctx_reg_zone_init(struct kbase_context *kctx,
-					   unsigned long zone_bits,
-					   u64 base_pfn, u64 va_size_pages)
-{
-	struct kbase_reg_zone *zone;
-
-	lockdep_assert_held(&kctx->reg_lock);
-	WARN_ON(!kbase_is_ctx_reg_zone(zone_bits));
-
-	zone = &kctx->reg_zone[KBASE_REG_ZONE_IDX(zone_bits)];
-	*zone = (struct kbase_reg_zone){
-		.base_pfn = base_pfn, .va_size_pages = va_size_pages,
-	};
-}
-
-/**
- * kbase_ctx_reg_zone_get_nolock - get a zone from @kctx where the caller does
- *                                 not have @kctx 's region lock
- * @kctx: Pointer to kbase context
- * @zone_bits: A KBASE_REG_ZONE_<...> to retrieve
- *
- * This should only be used in performance-critical paths where the code is
- * resilient to a race with the zone changing.
- *
- * Return: The zone corresponding to @zone_bits
- */
-static inline struct kbase_reg_zone *
-kbase_ctx_reg_zone_get_nolock(struct kbase_context *kctx,
-			      unsigned long zone_bits)
-{
-	WARN_ON(!kbase_is_ctx_reg_zone(zone_bits));
-
-	return &kctx->reg_zone[KBASE_REG_ZONE_IDX(zone_bits)];
-}
-
-/**
- * kbase_ctx_reg_zone_get - get a zone from @kctx
- * @kctx: Pointer to kbase context
- * @zone_bits: A KBASE_REG_ZONE_<...> to retrieve
- *
- * The get is not refcounted - there is no corresponding 'put' operation
- *
- * Return: The zone corresponding to @zone_bits
- */
-static inline struct kbase_reg_zone *
-kbase_ctx_reg_zone_get(struct kbase_context *kctx, unsigned long zone_bits)
-{
-	lockdep_assert_held(&kctx->reg_lock);
-	WARN_ON(!kbase_is_ctx_reg_zone(zone_bits));
-
-	return &kctx->reg_zone[KBASE_REG_ZONE_IDX(zone_bits)];
-}
 
 #endif				/* _KBASE_MEM_H_ */

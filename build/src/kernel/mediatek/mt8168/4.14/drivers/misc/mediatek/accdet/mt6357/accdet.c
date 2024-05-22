@@ -4,15 +4,9 @@
  */
 
 #include "accdet.h"
-#if defined(CONFIG_ACCDET_EINT) || defined(CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL)
+#ifdef CONFIG_ACCDET_EINT
 #include <linux/of_gpio.h>
-#include <linux/gpio.h>
 #endif
-
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-#include <linux/metricslog.h>
-#endif
-
 #include <upmu_common.h>
 #include <linux/timer.h>
 #include <linux/of.h>
@@ -69,14 +63,6 @@ static char *accdet_report_str[] = {
 	"Headset_five_pole",
 	"Line_out_device"
 };
-
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-static char *accdet_metrics_cable_string[3] = {
-	"NOTHING",
-	"HEADSET",
-	"HEADPHONES"
-};
-#endif
 
 /* accdet char device & class & device */
 static dev_t accdet_devno;
@@ -170,15 +156,6 @@ static int moisture_int_r = 47000;
 static int moisture_ext_r = 470000;
 #endif
 #endif
-
-/* add to solve insert slowly issue */
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-static int switch_mode_voltage;
-static int hp_sw1_pin;
-static int hp_sw2_pin;
-static int mic_voltage_delay;
-#endif
-
 
 static bool debug_thread_en;
 static bool dump_reg;
@@ -573,8 +550,10 @@ static void accdet_get_efuse(void)
 {
 	u32 efuseval = 0;
 #ifdef CONFIG_FOUR_KEY_HEADSET
+#if 0	// Disabled reading from EFUSE
 	u32 tmp_val = 0;
-	u32 tmp_8bit = 0
+	u32 tmp_8bit = 0;
+#endif
 #endif
 #ifdef CONFIG_MOISTURE_INT_SUPPORT
 	int tmp_div;
@@ -583,6 +562,7 @@ static void accdet_get_efuse(void)
 #endif
 
 #ifdef CONFIG_FOUR_KEY_HEADSET
+#if 0	// Disabled reading from EFUSE
 	/* 4-key efuse:
 	 * bit[9:2] efuse value is loaded, so every read out value need to be
 	 * left shift 2 bit,and then compare with voltage get from AUXADC.
@@ -603,6 +583,7 @@ static void accdet_get_efuse(void)
 	accdet_dts.four_key.up = tmp_8bit << 2;
 
 	accdet_dts.four_key.down = 600;
+#endif
 	pr_info("accdet key thresh: mid=%dmv,voice=%dmv,up=%dmv,down=%dmv\n",
 		accdet_dts.four_key.mid, accdet_dts.four_key.voice,
 		accdet_dts.four_key.up, accdet_dts.four_key.down);
@@ -677,6 +658,11 @@ static void accdet_get_efuse(void)
 #ifdef CONFIG_FOUR_KEY_HEADSET
 static u32 key_check(u32 v)
 {
+	pr_debug("accdet volt=%d\n", v);
+	pr_debug("accdet down=%d\n", accdet_dts.four_key.down);
+	pr_debug("accdet up=%d\n", accdet_dts.four_key.up);
+	pr_debug("accdet voice=%d\n", accdet_dts.four_key.voice);
+	pr_debug("accdet mid=%d\n", accdet_dts.four_key.mid);
 	if ((v < accdet_dts.four_key.down) && (v >= accdet_dts.four_key.up))
 		return DW_KEY;
 	if ((v < accdet_dts.four_key.up) && (v >= accdet_dts.four_key.voice))
@@ -704,58 +690,28 @@ static u32 key_check(u32 v)
 
 static void send_key_event(u32 keycode, u32 flag)
 {
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	char buf[512];
-	char *string = NULL;
-#endif
 	switch (keycode) {
 	case DW_KEY:
 		input_report_key(accdet_input_dev, KEY_VOLUMEDOWN, flag);
 		input_sync(accdet_input_dev);
 		pr_debug("accdet KEY_VOLUMEDOWN %d\n", flag);
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-		string = "KEY_VOLUMEDOWN";
-#endif
 		break;
 	case UP_KEY:
 		input_report_key(accdet_input_dev, KEY_VOLUMEUP, flag);
 		input_sync(accdet_input_dev);
 		pr_debug("accdet KEY_VOLUMEUP %d\n", flag);
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-		string = "KEY_VOLUMEUP";
-#endif
 		break;
 	case MD_KEY:
 		input_report_key(accdet_input_dev, KEY_PLAYPAUSE, flag);
 		input_sync(accdet_input_dev);
 		pr_debug("accdet KEY_PLAYPAUSE %d\n", flag);
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-		string = "KEY_PLAYPAUSE";
-#endif
 		break;
 	case AS_KEY:
 		input_report_key(accdet_input_dev, KEY_VOICECOMMAND, flag);
 		input_sync(accdet_input_dev);
 		pr_debug("accdet KEY_VOICECOMMAND %d\n", flag);
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-		string = "KEY_VOICECOMMAND";
-#endif
 		break;
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	default:
-		string = "NOKEY";
-#endif
 	}
-#ifdef CONFIG_AMAZON_MINERVA_METRICS_LOG
-	minerva_metrics_log(buf, 512, "%s:%s:100:%s,KEY=%s;SY,STATE=%d;IN:us-east-1",
-		METRICS_HEADSET_GROUP_ID, METRICS_HEADSET_KEY_SCHEMA_ID,
-		PREDEFINED_ESSENTIAL_KEY, string, flag);
-#elif defined(CONFIG_AMAZON_METRICS_LOG)
-	snprintf(buf, sizeof(buf),
-		"%s:jack:key=%s;DV;1,state=%d;CT;1:NR",
-		__func__, string, flag);
-	log_to_metrics(ANDROID_LOG_INFO, "AudioJackEvent", buf);
-#endif
 }
 
 static void send_accdet_status_event(u32 cable_type, u32 status)
@@ -988,11 +944,6 @@ static inline void enable_accdet(u32 state_swctrl)
 {
 	pmic_write(ACCDET_STATE_SWCTRL,
 		pmic_read(ACCDET_STATE_SWCTRL) | state_swctrl);
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-	/* Disable ACCDET comparator to avoid ACCDET IRQ before CTIA/OMTP detected */
-	pmic_write(ACCDET_STATE_SWCTRL,
-		pmic_read(ACCDET_STATE_SWCTRL) & (~ACCDET_CMP_PWM_EN_B0));
-#endif
 
 	/* enable ACCDET unit */
 #ifndef HW_MODE_SUPPORT
@@ -1027,9 +978,6 @@ static inline void disable_accdet(void)
 
 static inline void headset_plug_out(void)
 {
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	char buf[512];
-#endif
 	pr_info("accdet %s\n", __func__);
 	send_accdet_status_event(cable_type, 0);
 	accdet_status = PLUG_OUT;
@@ -1040,15 +988,6 @@ static inline void headset_plug_out(void)
 		pr_info("accdet %s, send key=%d release\n", __func__, cur_key);
 		cur_key = 0;
 	}
-#if defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	minerva_metrics_log(buf, 512, "%s:%s:100:%s,UNPLUGGED=true;BO,PLUGGED=false;BO,CABLE=NONE;SY:us-east-1",
-		METRICS_HEADSET_GROUP_ID, METRICS_HEADSET_JACK_SCHEMA_ID,
-		PREDEFINED_ESSENTIAL_KEY);
-#elif defined(CONFIG_AMAZON_METRICS_LOG)
-	snprintf(buf, sizeof(buf),
-		"%s:jack:unplugged=1;CT;1:NR", __func__);
-	log_to_metrics(ANDROID_LOG_INFO, "AudioJackEvent", buf);
-#endif
 	pr_info("accdet %s, set cable_type = NO_DEVICE\n", __func__);
 }
 
@@ -1073,54 +1012,6 @@ static void dis_micbias_work_callback(struct work_struct *work)
 	}
 }
 
-
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-static int accdet_switch_manual(bool plug_in, int type)
-{
-/* Refer to SD80 datasheet, 3rd ring (GND_MIC1) should be connected */
-/*to Ring2 pin of SD80 and 4th ring (GND_MIC2_1) should be conneted */
-/* to SLEEVE pin of SD80. However the HW connection on abc123 is */
-/* reverted... In order to adapt the HW, we revert the hp_sw1_pin */
-/*control for SD80, too. Currently hp_sw1_pin = 1 means */
-/*MICP = RING2 = 4th ring (GND_MIC2_1), CTIA mode. hp_sw1_pin = 0 */
-/*means MICP = SLEEVE = 3rd ring (GND_MIC1), OMTP mode. */
-	if (plug_in) {
-		if (type == TYPE_CTIA) {
-			pr_info("[Accdet] CTIA headset!!!\n");
-			/* Default: CTIA, so not setting again  */
-		} else {
-			pr_info("[Accdet] OMTP headset!!!\n");
-			if (gpio_is_valid(hp_sw1_pin))
-				gpio_set_value(hp_sw1_pin, 0);
-			if (gpio_is_valid(hp_sw2_pin))
-				gpio_set_value(hp_sw2_pin, 1);
-		}
-	} else {
-		/* Default: CTIA:LRGM */
-		if (gpio_is_valid(hp_sw1_pin))
-			gpio_set_value(hp_sw1_pin, 1);
-		if (gpio_is_valid(hp_sw2_pin))
-			gpio_set_value(hp_sw2_pin, 0);
-	}
-
-	return 0;
-}
-
-static int accdet_switch_manual_work(void)
-{
-	int accdet_adc = 0;
-	msleep(mic_voltage_delay);
-	accdet_adc = pmic_get_auxadc_value(AUXADC_LIST_ACCDET);
-	pr_info("accdet_voltage = %d mv\n", accdet_adc);
-	if (accdet_adc > switch_mode_voltage)
-		accdet_switch_manual(true, TYPE_CTIA);
-	else
-		accdet_switch_manual(true, TYPE_OMTP);
-
-	return 0;
-}
-#endif
-
 static void eint_work_callback(struct work_struct *work)
 {
 #ifdef CONFIG_ACCDET_EINT_IRQ
@@ -1143,7 +1034,6 @@ static void eint_work_callback(struct work_struct *work)
 		/* set PWM IDLE  on */
 		pmic_write(ACCDET_STATE_SWCTRL,
 			(pmic_read(ACCDET_STATE_SWCTRL) | ACCDET_PWM_IDLE));
-
 #ifdef CONFIG_ACCDET_EINT_IRQ
 #ifdef CONFIG_ACCDET_SUPPORT_EINT0
 		enable_accdet(ACCDET_EINT0_PWM_IDLE_B11 | ACCDET_PWM_EN);
@@ -1155,11 +1045,6 @@ static void eint_work_callback(struct work_struct *work)
 #else
 		enable_accdet(ACCDET_PWM_EN);
 #endif
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-		accdet_switch_manual_work();
-		pmic_write(ACCDET_STATE_SWCTRL,
-			pmic_read(ACCDET_STATE_SWCTRL) | ACCDET_CMP_PWM_EN_B0);
-#endif
 	} else {
 		pr_info("accdet cur:plug-out, cur_eint_state = %d\n",
 			cur_eint_state);
@@ -1167,15 +1052,12 @@ static void eint_work_callback(struct work_struct *work)
 		eint_accdet_sync_flag = false;
 		mutex_unlock(&accdet_eint_irq_sync_mutex);
 		del_timer_sync(&micbias_timer);
+
 		/* clc Accdet PWM idle */
 		pmic_write(ACCDET_STATE_SWCTRL,
 			pmic_read(ACCDET_STATE_SWCTRL) & (~ACCDET_PWM_IDLE));
 		disable_accdet();
 		headset_plug_out();
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-		pr_info("qian accdet %s was called\n", __func__);
-		accdet_switch_manual(false, TYPE_CTIA);
-#endif
 	}
 
 #ifdef CONFIG_ACCDET_EINT
@@ -1301,12 +1183,9 @@ static inline void check_cable_type(void)
 		} else if (cur_AB == ACCDET_STATE_AB_11) {
 			pr_info("accdet Don't send plug out in MIC_BIAS\n");
 			mutex_lock(&accdet_eint_irq_sync_mutex);
-			if (eint_accdet_sync_flag) {
+			if (eint_accdet_sync_flag)
 				accdet_status = PLUG_OUT;
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-				accdet_switch_manual(false, TYPE_CTIA);
-#endif
-			} else
+			else
 				pr_info("accdet headset has been plug-out\n");
 			mutex_unlock(&accdet_eint_irq_sync_mutex);
 		} else
@@ -1364,10 +1243,6 @@ static inline void check_cable_type(void)
 
 static void accdet_work_callback(struct work_struct *work)
 {
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	char buf[512];
-#endif
-
 	u32 pre_cable_type = cable_type;
 
 	__pm_stay_awake(accdet_irq_lock);
@@ -1375,27 +1250,8 @@ static void accdet_work_callback(struct work_struct *work)
 
 	mutex_lock(&accdet_eint_irq_sync_mutex);
 	if (eint_accdet_sync_flag) {
-		if (pre_cable_type != cable_type) {
-#ifdef CONFIG_AMAZON_MINERVA_METRICS_LOG
-			if (pre_status == PLUG_OUT) {
-					minerva_metrics_log(buf, 512,
-						"%s:%s:100:%s,UNPLUGGED=false;BO,"
-						"PLUGGED=true;BO,CABLE=%s;SY:us-east-1",
-						METRICS_HEADSET_GROUP_ID, METRICS_HEADSET_JACK_SCHEMA_ID,
-						PREDEFINED_ESSENTIAL_KEY,
-						accdet_metrics_cable_string[cable_type]);
-			}
-#elif defined(CONFIG_AMAZON_METRICS_LOG)
-			if (pre_status == PLUG_OUT) {
-				snprintf(buf, sizeof(buf),
-					"%s:jack:plugged=1;CT;1,state_%s=1;CT;1:NR",
-					__func__,
-					accdet_metrics_cable_string[cable_type]);
-				log_to_metrics(ANDROID_LOG_INFO, "AudioJackEvent", buf);
-			}
-#endif
+		if (pre_cable_type != cable_type)
 			send_accdet_status_event(cable_type, 1);
-		}
 	} else
 		pr_info("%s() Headset has been plugout. Don't set state\n",
 			__func__);
@@ -1745,7 +1601,7 @@ static inline int ext_eint_setup(struct platform_device *platform_device)
 }
 #endif
 
-static int accdet_get_dts_data(struct platform_device *platform_device)
+static int accdet_get_dts_data(void)
 {
 	int ret;
 	struct device_node *node = NULL;
@@ -1762,47 +1618,6 @@ static int accdet_get_dts_data(struct platform_device *platform_device)
 		pr_notice("%s can't find compatible dts node\n", __func__);
 		return -1;
 	}
-
-#ifdef CONFIG_ACCDET_OMTP_CTIA_SWITCH_MANUAL
-	ret = of_property_read_u32(node, "mic_voltage_delay",
-			 &mic_voltage_delay);
-	if (ret < 0) {
-		pr_info("%s: mic voltage delay is not enabled\n", __func__);
-		return -1;
-	}
-	ret = of_property_read_u32(node, "switch-mode-vol",
-			 &switch_mode_voltage);
-	if (ret < 0) {
-		pr_info("%s: switch mode voltage is not enabled\n", __func__);
-		return -1;
-	}
-	hp_sw1_pin = of_get_named_gpio(node, "hp-sw1-pin", 0);
-	if (!gpio_is_valid(hp_sw1_pin)) {
-		pr_err("%s: not find hp-sw1-pin\n", __func__);
-		return -1;
-	} else {
-		ret = devm_gpio_request_one(&platform_device->dev, hp_sw1_pin,
-			GPIOF_OUT_INIT_HIGH, "hp-sw1-pin");
-		if (ret < 0) {
-			pr_err("%s: gpio_request fail, ret(%d)\n", __func__, ret);
-			return -1;
-		}
-	}
-
-	hp_sw2_pin = of_get_named_gpio(node, "hp-sw2-pin", 0);
-	if (!gpio_is_valid(hp_sw2_pin)) {
-		pr_debug("%s: not find hp-sw2-pin, it's using SD80 ...\n", __func__);
-	} else {
-		pr_debug("%s: find hp-sw2-pin, it's not using SD80 ...\n",
-				 __func__);
-		ret = devm_gpio_request_one(&platform_device->dev, hp_sw2_pin,
-			GPIOF_OUT_INIT_LOW, "hp-sw2-pin");
-		if (ret < 0) {
-			pr_err("%s: gpio_request fail, ret(%d)\n", __func__, ret);
-			return -1;
-		}
-	}
-#endif
 
 #if defined(CONFIG_MOISTURE_EXT_SUPPORT) || defined(CONFIG_MOISTURE_INT_SUPPORT)
 	of_property_read_u32(node, "moisture-water-r", &water_r);
@@ -1827,6 +1642,8 @@ static int accdet_get_dts_data(struct platform_device *platform_device)
 	pr_info("accdet mic_vol=%d, plugout_deb=%d mic_mode=%d eint_pol=%d\n",
 	     accdet_dts.mic_vol, accdet_dts.plugout_deb,
 	     accdet_dts.mic_mode, accdet_dts.eint_pol);
+
+	accdet_eint_type = accdet_dts.eint_pol;
 
 #ifdef CONFIG_FOUR_KEY_HEADSET
 	ret = of_property_read_u32_array(node, "headset-four-key-threshold",
@@ -1972,6 +1789,12 @@ static void accdet_init_once(void)
 	reg = pmic_read(ACCDET_STATE_SWCTRL);
 	pmic_write(ACCDET_STATE_SWCTRL,
 		reg | ACCDET_EINT0_PWM_EN_B3 | ACCDET_EINT0_PWM_IDLE_B11);
+
+	if (accdet_eint_type == IRQ_TYPE_LEVEL_HIGH) {
+		reg = pmic_read(ACCDET_IRQ_STS);
+		pmic_write(ACCDET_IRQ_STS,
+			reg | ACCDET_EINT0_IRQ_POL_B14);
+	}
 
 	/* open top interrupt eint0 */
 	pmic_write(AUD_TOP_INT_CON0_SET,
@@ -2206,7 +2029,7 @@ int mt_accdet_probe(struct platform_device *dev)
 #endif
 #endif
 
-	ret = accdet_get_dts_data(dev);
+	ret = accdet_get_dts_data();
 	if (ret) {
 		atomic_set(&accdet_first, 0);
 		pr_notice("%s accdet_get_dts_data err!\n", __func__);
@@ -2234,7 +2057,6 @@ int mt_accdet_probe(struct platform_device *dev)
 		goto err_eint_setup;
 	}
 #endif
-
 	atomic_set(&accdet_first, 1);
 	mod_timer(&accdet_init_timer, (jiffies + ACCDET_INIT_WAIT_TIMER));
 

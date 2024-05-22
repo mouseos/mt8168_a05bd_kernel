@@ -134,7 +134,7 @@ mtk_chr_get_tchr(int *min_tchr, int *max_tchr)
  * for main charger
  * in both PEP30 and dual charging cases.
  */
-int mtktscharger_get_hw_temp(void)
+static int mtktscharger_get_hw_temp(void)
 {
 	int charger_idx = MAIN_CHARGER;
 	int tmax = 0, tmin = 0;
@@ -167,7 +167,7 @@ int mtktscharger_get_hw_temp(void)
 	return t;
 }
 #else
-int mtktscharger_get_hw_temp(void)
+static int mtktscharger_get_hw_temp(void)
 {
 	int ret = -1;
 	int min_temp = 0, max_temp = 0;

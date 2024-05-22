@@ -37,13 +37,6 @@
 #else
 #include <tmp_battery.h>
 #endif
-#include <linux/reboot.h>
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-#include <linux/sign_of_life.h>
-#endif
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-#include <linux/thermal_framework.h>
-#endif
 
 /* ************************************ */
 /* Function prototype*/
@@ -56,7 +49,6 @@ static void tsbattery_exit(void);
 int __attribute__ ((weak))
 read_tbat_value(void)
 {
-	pr_notice("[Thermal] E_WF: %s doesn't exist\n", __func__);
 	return 30;
 }
 
@@ -140,13 +132,6 @@ static int polling_trip_temp2 = 20000;
 static int polling_factor1 = 5000;
 static int polling_factor2 = 10000;
 
-#ifdef CONFIG_THERMAL_DEBOUNCE
-#define BAT_VALID_CHANGE_1		20000
-#define BAT_VALID_CHANGE_5		40000
-#define BAT_VALID_CHANGE_10		50000
-static int pre_temp1, BAT_counter;
-static int BAT_temp_change = BAT_VALID_CHANGE_1;
-#endif
 /* static int battery_write_flag=0; */
 
 #define mtktsbattery_TEMP_CRIT 60000	/* 60.000 degree Celsius */
@@ -232,7 +217,7 @@ static int get_hw_battery_temp(void)
 
 static DEFINE_MUTEX(Battery_lock);
 int ts_battery_at_boot_time = 1;
-int mtktsbattery_get_hw_temp(void)
+static int mtktsbattery_get_hw_temp(void)
 {
 	int t_ret = 0;
 	static int battery[60] = { 0 };
@@ -268,46 +253,20 @@ int mtktsbattery_get_hw_temp(void)
 									t_ret);
 	return t_ret;
 }
-EXPORT_SYMBOL(mtktsbattery_get_hw_temp);
 
 static int mtktsbattery_get_temp(struct thermal_zone_device *thermal, int *t)
 {
-#ifdef CONFIG_THERMAL_DEBOUNCE
-	int ret = 0;
-#endif
 
 	*t = mtktsbattery_get_hw_temp();
-#ifdef CONFIG_THERMAL_DEBOUNCE
-	if ((*t > 80000) || (*t < -60000)) {
-		pr_err("%s temp(%d) too high, drop this data!\n",
-					__func__, *t);
-		return -1;
-	}
-	ret = thermal_zone_debounce(&pre_temp1, t,
-			BAT_temp_change, &BAT_counter, thermal->type);
-#endif
-	if ((int)*t >= polling_trip_temp1) {
-		thermal->polling_delay = interval * 1000;
-#ifdef CONFIG_THERMAL_DEBOUNCE
-		BAT_temp_change = BAT_VALID_CHANGE_1;
-#endif
-	} else if ((int)*t < polling_trip_temp2) {
-		thermal->polling_delay = interval * polling_factor2;
-#ifdef CONFIG_THERMAL_DEBOUNCE
-		BAT_temp_change = BAT_VALID_CHANGE_10;
-#endif
-	} else {
-		thermal->polling_delay = interval * polling_factor1;
-#ifdef CONFIG_THERMAL_DEBOUNCE
-		BAT_temp_change = BAT_VALID_CHANGE_5;
-#endif
-	}
 
-#ifdef CONFIG_THERMAL_DEBOUNCE
-	return ret;
-#else
+	if ((int)*t >= polling_trip_temp1)
+		thermal->polling_delay = interval * 1000;
+	else if ((int)*t < polling_trip_temp2)
+		thermal->polling_delay = interval * polling_factor2;
+	else
+		thermal->polling_delay = interval * polling_factor1;
+
 	return 0;
-#endif
 }
 
 static int mtktsbattery_bind(struct thermal_zone_device *thermal,
@@ -443,30 +402,6 @@ static int mtktsbattery_get_crit_temp(struct thermal_zone_device *thermal,
 	return 0;
 }
 
-static int mtktsbattery_thermal_notify(struct thermal_zone_device *thermal,
-				int trip, enum thermal_trip_type type)
-{
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("[%s][%s]type:[%s] Thermal shutdown Battery, current temp=%d, trip=%d, trip_temp=%d\n",
-			__func__, dev_name(&thermal->device), thermal->type,
-			thermal->temperature, trip, trip_temp[trip]);
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_BATTERY);
-	}
-#endif
-
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("%s: thermal_shutdown notify\n", __func__);
-		last_kmsg_thermal_shutdown();
-		pr_err("%s: thermal_shutdown notify end\n", __func__);
-	}
-#endif
-	if (type == THERMAL_TRIP_CRITICAL)
-		set_shutdown_enable_dcap(&thermal->device);
-
-	return 0;
-}
 /* bind callback functions to thermalzone */
 static struct thermal_zone_device_ops mtktsbattery_dev_ops = {
 	.bind = mtktsbattery_bind,
@@ -477,7 +412,6 @@ static struct thermal_zone_device_ops mtktsbattery_dev_ops = {
 	.get_trip_type = mtktsbattery_get_trip_type,
 	.get_trip_temp = mtktsbattery_get_trip_temp,
 	.get_crit_temp = mtktsbattery_get_crit_temp,
-	.notify = mtktsbattery_thermal_notify,
 };
 
 /*
@@ -524,16 +458,14 @@ struct thermal_cooling_device *cdev, unsigned long state)
 
 	cl_dev_sysrst_state = state;
 	if (cl_dev_sysrst_state == 1) {
-		pr_err("Power/battery_Thermal: reset, reset, reset!!!");
-		pr_err("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-		pr_err("*****************************************");
-		pr_err("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+		pr_debug("Power/battery_Thermal: reset, reset, reset!!!");
+		pr_debug("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+		pr_debug("*****************************************");
+		pr_debug("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
 
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_BATTERY);
-#endif
-
-		/* To trigger data abort to reset the system for thermal protection. */
+		/* To trigger data abort to reset the system
+		 * for thermal protection.
+		 */
 		BUG();
 	}
 	return 0;
@@ -911,6 +843,5 @@ static void __exit mtktsbattery_exit(void)
 	mtkTTimer_unregister("mtktsbattery");
 #endif
 }
-/* module_init(mtktsbattery_init); */
-late_initcall(mtktsbattery_init);
+module_init(mtktsbattery_init);
 module_exit(mtktsbattery_exit);

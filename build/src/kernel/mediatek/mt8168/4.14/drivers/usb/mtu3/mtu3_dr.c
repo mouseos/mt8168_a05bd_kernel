@@ -140,6 +140,7 @@ int ssusb_set_vbus(struct otg_switch_mtk *otg_sx, int is_on)
 	struct ssusb_mtk *ssusb =
 		container_of(otg_sx, struct ssusb_mtk, otg_switch);
 	struct regulator *vbus = otg_sx->vbus;
+	struct regulator *vbst_5v = otg_sx->vbst_5v;
 	int ret;
 
 	/* vbus is optional */
@@ -152,6 +153,7 @@ int ssusb_set_vbus(struct otg_switch_mtk *otg_sx, int is_on)
 		#ifdef CONFIG_MTK_CHARGER
 		charger_dev_enable_otg(ssusb->chg_dev, true);
 		#endif
+		ret = regulator_enable(vbst_5v);
 		ret = regulator_enable(vbus);
 		if (ret) {
 			dev_err(ssusb->dev, "vbus regulator enable failed\n");
@@ -162,6 +164,7 @@ int ssusb_set_vbus(struct otg_switch_mtk *otg_sx, int is_on)
 		charger_dev_enable_otg(ssusb->chg_dev, false);
 		#endif
 		regulator_disable(vbus);
+		regulator_disable(vbst_5v);
 	}
 
 	return 0;
@@ -179,7 +182,7 @@ static void ssusb_set_force_mode(struct ssusb_mtk *ssusb,
 		break;
 	case MTU3_DR_FORCE_HOST:
 		value |= SSUSB_U2_PORT_FORCE_IDDIG;
-		value &= ~(SSUSB_U2_PORT_RG_IDDIG | SSUSB_U2_PORT_OTG_SEL);
+		value &= ~SSUSB_U2_PORT_RG_IDDIG;
 		break;
 	case MTU3_DR_FORCE_NONE:
 		value &= ~(SSUSB_U2_PORT_FORCE_IDDIG | SSUSB_U2_PORT_RG_IDDIG);
@@ -215,18 +218,20 @@ static void ssusb_set_mailbox(struct otg_switch_mtk *otg_sx,
 	struct platform_device *pdev = to_platform_device(ssusb->dev);
 	struct device_node *node = pdev->dev.of_node;
 
-	dev_info(ssusb->dev, "mailbox state(%d)\n", status);
+	dev_dbg(ssusb->dev, "mailbox state(%d)\n", status);
 	switch (status) {
 	case MTU3_ID_GROUND:
+		if (ssusb->is_host == true)
+			break;
 		if (!ssusb->keep_ao) {
 			ret = ssusb_clks_enable(ssusb);
 			if (ret) {
-				dev_info(ssusb->dev, "failed to enable clock\n");
+				dev_err(ssusb->dev, "failed to enable clock\n");
 				break;
 			}
 			ret = ssusb_phy_power_on(ssusb);
 			if (ret) {
-				dev_info(ssusb->dev, "failed to power on phy\n");
+				dev_err(ssusb->dev, "failed to power on phy\n");
 				goto err_power_on;
 			}
 			ssusb_ip_sw_reset(ssusb);
@@ -242,7 +247,6 @@ static void ssusb_set_mailbox(struct otg_switch_mtk *otg_sx,
 			switch_port_to_host(ssusb);
 		}
 		ssusb_set_vbus(otg_sx, 1);
-		pm_stay_awake(ssusb->dev);
 		ssusb->is_host = true;
 		mtu3_drp_to_host(mtu);
 		break;
@@ -250,7 +254,6 @@ static void ssusb_set_mailbox(struct otg_switch_mtk *otg_sx,
 		ssusb->is_host = false;
 		ssusb_set_vbus(otg_sx, 0);
 		switch_port_to_device(ssusb);
-		pm_relax(ssusb->dev);
 		mtu3_drp_to_none(mtu);
 		if (!ssusb->keep_ao) {
 			ssusb_host_exit(ssusb);
@@ -276,12 +279,12 @@ static void ssusb_set_mailbox(struct otg_switch_mtk *otg_sx,
 		if (!ssusb->keep_ao) {
 			ret = ssusb_clks_enable(ssusb);
 			if (ret) {
-				dev_info(ssusb->dev, "failed to enable clock\n");
+				dev_err(ssusb->dev, "failed to enable clock\n");
 				break;
 			}
 			ret = ssusb_phy_power_on(ssusb);
 			if (ret) {
-				dev_info(ssusb->dev, "failed to power on phy\n");
+				dev_err(ssusb->dev, "failed to power on phy\n");
 				goto err_power_on;
 			}
 			ssusb_ip_sw_reset(ssusb);
@@ -657,6 +660,17 @@ void ssusb_otg_switch_exit(struct ssusb_mtk *ssusb)
 
 	if (otg_sx->manual_drd_enabled)
 		ssusb_debugfs_exit(ssusb);
+}
+
+int ssusb_otg_detect(struct ssusb_mtk *ssusb)
+{
+	struct extcon_dev *edev = g_extcon_edev;
+	struct otg_switch_mtk *otg_sx = &ssusb->otg_switch;
+
+	if (extcon_get_state(edev, EXTCON_USB_HOST) == true)
+		ssusb_set_mailbox(otg_sx, MTU3_ID_GROUND);
+
+	return 0;
 }
 
 bool mt_usb_is_device(void)

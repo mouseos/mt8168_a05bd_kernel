@@ -39,7 +39,6 @@
 #define PRIMARY_THREE_OVL_CASCADE
 
 extern phys_addr_t mtkfb_get_fb_base(void);
-extern bool g_to_nonsec;
 
 /* start overlay module */
 int ovl_start(enum DISP_MODULE_ENUM module, void *handle);

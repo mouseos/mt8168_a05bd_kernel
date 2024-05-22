@@ -55,29 +55,16 @@ int display_bias_enable(void)
 
 	display_bias_regulator_init();
 
-#if defined(JD936X_WXGA_DSI_VDO_ONYX) || (defined(ILI9881C_WXGA_DSI_VDO_ONYX)) || (defined(SC7705_WXGA_DSI_VDO_ONYX))
 	/* set voltage with min & max*/
-	ret = regulator_set_voltage(disp_bias_pos, 6000000, 6000000);
+	ret = regulator_set_voltage(disp_bias_pos, 5400000, 5400000);
 	if (ret < 0)
 		pr_info("set voltage disp_bias_pos fail, ret = %d\n", ret);
 	retval |= ret;
 
-	ret = regulator_set_voltage(disp_bias_neg, 6000000, 6000000);
+	ret = regulator_set_voltage(disp_bias_neg, 5400000, 5400000);
 	if (ret < 0)
 		pr_info("set voltage disp_bias_neg fail, ret = %d\n", ret);
 	retval |= ret;
-#else
-	/* set voltage with min & max*/
-	ret = regulator_set_voltage(disp_bias_pos, 5000000, 5000000);
-	if (ret < 0)
-		pr_info("set voltage disp_bias_pos fail, ret = %d\n", ret);
-	retval |= ret;
-
-	ret = regulator_set_voltage(disp_bias_neg, 5000000, 5000000);
-	if (ret < 0)
-		pr_info("set voltage disp_bias_neg fail, ret = %d\n", ret);
-	retval |= ret;
-#endif
 
 #if 0
 	/* get voltage */

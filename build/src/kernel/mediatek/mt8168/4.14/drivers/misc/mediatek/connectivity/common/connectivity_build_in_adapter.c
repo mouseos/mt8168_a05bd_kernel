@@ -33,12 +33,6 @@
 
 #include <linux/interrupt.h>
 
-#ifdef CONFIG_PINCTRL_MTK_PARIS
-#include <pinctrl-mtk-common-v2_debug.h>
-#else
-#include <linux/gpio.h>
-#endif
-
 #ifdef CONFIG_MTK_MT6306_GPIO_SUPPORT
 #include <mtk_6306_gpio.h>
 #endif
@@ -73,10 +67,6 @@
 #ifdef CPU_BOOST
 #include "mtk_ppm_api.h"
 #endif
-
-#include <linux/mm.h>
-#include <linux/fdtable.h>
-#include <linux/fs.h>
 
 #ifndef TASK_STATE_TO_CHAR_STR
 #define TASK_STATE_TO_CHAR_STR "RSDTtXZxKWPNn"
@@ -284,119 +274,6 @@ void connectivity_export_dump_gpio_info(int start, int end)
 EXPORT_SYMBOL(connectivity_export_dump_gpio_info);
 #endif
 
-
-int conn_export_file_opened_by_task(struct task_struct *task,
-	struct file *file)
-{
-	struct files_struct *files;
-	unsigned int fd;
-	int ret = -1;
-
-	files = get_files_struct(task);
-	if (!files)
-		return ret;
-
-	for (fd = 3; fd < files_fdtable(files)->max_fds; fd++) {
-		if (fcheck_files(files, fd) == file) {
-			ret = 0;
-			break;
-		}
-	}
-	put_files_struct(files);
-	return ret;
-}
-EXPORT_SYMBOL(conn_export_file_opened_by_task);
-
-void conn_export_read_task_name(struct task_struct *task, char *pcName,
-	unsigned char name_size)
-{
-#define TASK_CMD_LINE_SIZE 128
-	char aucBuf[TASK_CMD_LINE_SIZE] = {0};
-	char *pucBuf = &aucBuf[0];
-	struct mm_struct *mm;
-	unsigned long count = TASK_CMD_LINE_SIZE - 1;
-	unsigned long arg_start, env_start, arg_end;
-	unsigned long arg_len, env_len;
-	unsigned long pos, len;
-	char env_exist;
-	unsigned char fgDone = 0;
-#define READ_VM() \
-	do {\
-		while (count > 0 && len > 0 && !fgDone) { \
-			unsigned int _count, l;\
-			int nr_read;\
-\
-			_count = min(count, len);\
-			nr_read = access_remote_vm(mm, pos, pucBuf, _count, 0);\
-			if (nr_read <= 0)\
-				break;\
-			l = strnlen(pucBuf, nr_read);\
-			if (l < nr_read) {\
-				nr_read = l;\
-				fgDone = 1;\
-			} \
-			pos += nr_read;\
-			len -= nr_read;\
-			pucBuf += nr_read;\
-			count -= nr_read;\
-		} \
-	} while (0)
-
-	mm = get_task_mm(task);
-	if (!mm || !mm->env_end)
-		goto use_comm;
-
-	down_read(&mm->mmap_sem);
-	arg_start = mm->arg_start;
-	arg_end = mm->arg_end;
-	arg_len = (arg_end >= arg_start) ? arg_end - arg_start : 0;
-	env_start = mm->env_start;
-	env_len = (mm->arg_end >= arg_start) ? mm->env_end - env_start : 0;
-	up_read(&mm->mmap_sem);
-
-	/* arg is empty */
-	if (!arg_len) {
-		pr_err("argv length is 0\n");
-		goto use_comm;
-	}
-	/* Read last byte of argv */
-	if (access_remote_vm(mm, arg_end - 1, &env_exist, 1, 0) <= 0)
-		goto use_comm;
-
-	/* Read argv */
-	pos = arg_start;
-	len = arg_len;
-	READ_VM();
-	/* Read Env args */
-	if (env_exist != '\0' && env_len > 0 && !fgDone) {
-		pr_info("read env\n");
-		pos = env_start;
-		len = env_len;
-		READ_VM();
-	}
-
-use_comm:
-	if (mm)
-		mmput(mm);
-
-	if (pucBuf != &aucBuf[0]) {
-		pucBuf = strchr(aucBuf, ' ');
-		if (pucBuf)
-			*pucBuf = '\0';
-		pucBuf = strrchr(aucBuf, '/');
-		if (!pucBuf)
-			pucBuf = &aucBuf[0];
-		else
-			pucBuf++;
-		strncpy(pcName, pucBuf, name_size);
-	} else {
-		pr_info("No cmdline, using comm %s, %d\n", task->comm,
-			aucBuf[0]);
-		strncpy(pcName, task->comm, name_size);
-	}
-}
-EXPORT_SYMBOL(conn_export_read_task_name);
-
 void connectivity_export_dump_thread_state(const char *name)
 {
 	static const char stat_nam[] = TASK_STATE_TO_CHAR_STR;
@@ -444,10 +321,7 @@ EXPORT_SYMBOL(connectivity_export_dump_thread_state);
 
 int connectivity_export_gpio_get_tristate_input(unsigned int pin)
 {
-#ifdef CONFIG_PINCTRL_MTK_PARIS
-	return gpio_get_tristate_input(pin);
-#else
-	return gpio_get_value(pin);
-#endif
+//	return gpio_get_tristate_input(pin);
+	return 0;
 }
 EXPORT_SYMBOL(connectivity_export_gpio_get_tristate_input);

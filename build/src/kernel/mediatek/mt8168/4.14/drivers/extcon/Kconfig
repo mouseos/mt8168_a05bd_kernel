@@ -159,14 +159,6 @@ config EXTCON_USB_GPIO
 	  Say Y here to enable GPIO based USB cable detection extcon support.
 	  Used typically if GPIO is used for USB ID pin detection.
 
-config EXTCON_USB_TPC
-	tristate "USB typec extcon support"
-	depends on MTK_CHARGER || COMPILE_TEST
-	help
-	  Say Y here to enable USB typec detection extcon support.
-	  MTK charger module would do CC detection, then send notification.
-	  The TYPE-C extcon receive the message then ask USB change to right mode.
-
 config EXTCON_USBC_CROS_EC
 	tristate "ChromeOS Embedded Controller EXTCON support"
 	depends on MFD_CROS_EC

@@ -551,7 +551,7 @@ void notrace aee_wdt_atf_entry(void)
 
 	dis_D_inner_fL1L2();
 
-	if (atf_aee_debug_virt_addr && cpu >= 0) {
+	if (atf_aee_debug_virt_addr) {
 		regs = (void *)(atf_aee_debug_virt_addr +
 				(cpu * sizeof(struct atf_aee_regs)));
 
@@ -614,8 +614,7 @@ void notrace aee_wdt_atf_entry(void)
 #endif
 		aee_wdt_atf_info(cpu, &pregs);
 	} else {
-		if (cpu >= 0)
-			aee_wdt_atf_info(cpu, 0);
+		aee_wdt_atf_info(cpu, 0);
 	}
 }
 

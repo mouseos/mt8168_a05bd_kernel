@@ -347,10 +347,6 @@ int vcu_enc_set_param(struct venc_vcu_inst *vcu,
 		out.data_item = 1;
 		out.data[0] = enc_param->nonrefp;
 		break;
-	case VENC_SET_PARAM_NONREFPFREQ:
-		out.data_item = 1;
-		out.data[0] = enc_param->nonrefpfreq;
-		break;
 	case VENC_SET_PARAM_DETECTED_FRAMERATE:
 		out.data_item = 1;
 		out.data[0] = enc_param->detectframerate;
@@ -383,6 +379,25 @@ int vcu_enc_set_param(struct venc_vcu_inst *vcu,
 		out.data_item = 1;
 		out.data[0] = enc_param->roion;
 		break;
+	case VENC_SET_PARAM_NONREFPFREQ:
+		out.data_item = 1;
+		out.data[0] = enc_param->nonrefpfreq;
+		break;
+
+	case VENC_SET_PARAM_MAX_REFP_NUM:
+		out.data_item = 1;
+		out.data[0] = enc_param->maxrefpnum;
+		break;
+
+	case VENC_SET_PARAM_REFP_DISTANCE:
+		out.data_item = 1;
+		out.data[0] = enc_param->refpdistance;
+		break;
+	case VENC_SET_PARAM_REFP_FRMNUM:
+			out.data_item = 1;
+			out.data[0] = enc_param->refpfrmnum;
+			break;
+
 
 	default:
 		mtk_vcodec_err(vcu, "id %d not supported", id);

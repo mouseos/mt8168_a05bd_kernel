@@ -109,7 +109,6 @@ struct acc_context {
 	atomic_t trace;
 	struct workqueue_struct *accel_workqueue;
 
-	atomic_t acc_pause;
 	atomic_t early_suspend;
 	/* struct acc_drv_obj    drv_obj; */
 	struct acc_data drv_data;
@@ -122,7 +121,6 @@ struct acc_context {
 	bool is_first_data_after_enable;
 	bool is_polling_run;
 	bool is_batch_enable; /* v2.judging whether sensor is in batch mode */
-	bool is_acc_need_restore_polling;
 	int power;
 	int enable;
 	int64_t delay_ns;
@@ -131,8 +129,6 @@ struct acc_context {
 
 /* for auto detect */
 extern int acc_driver_add(struct acc_init_info *obj);
-extern int acc_driver_pause_polling(int en);
-extern int acc_driver_query_polling_state(void);
 extern int acc_data_report(struct acc_data *data);
 extern int acc_bias_report(struct acc_data *data);
 extern int acc_cali_report(struct acc_data *data);

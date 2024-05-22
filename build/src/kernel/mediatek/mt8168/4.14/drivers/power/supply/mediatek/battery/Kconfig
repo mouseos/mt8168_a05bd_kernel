@@ -27,10 +27,3 @@ config MTK_ADDITIONAL_BATTERY_TABLE
 	  Table number is five.
 	  Set No to disable the fifth battery table
 	  Table number is four.
-
-config MTK_GET_BATTERY_ID_AUXADC
-	bool "Enable battery auxadc"
-	default n
-	help
-	  Set Yes to enable battery auxadc
-	  Set No to disable battery auxadc

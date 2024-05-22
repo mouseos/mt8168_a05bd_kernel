@@ -20,7 +20,7 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/smi/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/smi/$(MTK_PLATFORM)/
 
 
-FORCE_STEP0 := true
+
 SKIP_SMI_CONFIG := true
 PLL_HOPPING_READY := false
 
@@ -28,11 +28,9 @@ ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6771"))
 ccflags-y += -DDYNAMIC_DISP_HRT
 SUPPORT_USE_DDR_TYPE := true
 SUPPORT_MMP := true
-FORCE_STEP0 := false
 else ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt8168"))
 ccflags-y += -DSMI_AQU
 ENABLE_SCENARIO := true
-FORCE_STEP0 := false
 PLL_HOPPING_READY := true
 endif
 
@@ -41,9 +39,6 @@ MMDVFS_PLATFORM_DIR=$(srctree)/drivers/misc/mediatek/mmdvfs/$(MTK_PLATFORM)
 obj-y += mmdvfs_pmqos.o
 obj-y += mmdvfs_ioctl.o
 
-ifeq (true, $(FORCE_STEP0))
-ccflags-y += -DMMDVFS_FORCE_STEP0
-endif
 ifeq (true, $(PLL_HOPPING_READY))
 ccflags-y += -DPLL_HOPPING_READY
 endif

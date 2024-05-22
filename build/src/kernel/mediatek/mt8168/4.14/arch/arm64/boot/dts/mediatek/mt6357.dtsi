@@ -107,6 +107,11 @@
 		mediatek,clkbuf-driving-current = <1 1 1 1 1 1 1>;
 	};
 
+	pmic_dcxo: pmic_dcxo {
+		compatible = "mediatek,mt6357-dcxo";
+		default-capid = <0x27>;
+	};
+
 	ldo_regulators {
 		mt_pmic_vfe28_ldo_reg: ldo_vfe28 {
 			compatible = "regulator-fixed";

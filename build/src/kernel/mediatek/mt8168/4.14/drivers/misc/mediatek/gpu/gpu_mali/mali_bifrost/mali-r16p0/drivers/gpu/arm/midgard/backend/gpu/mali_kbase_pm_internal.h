@@ -629,4 +629,6 @@ extern bool corestack_driver_control;
  */
 extern bool platform_power_down_only;
 
+extern bool l2_always_on;
+
 #endif /* _KBASE_BACKEND_PM_INTERNAL_H_ */

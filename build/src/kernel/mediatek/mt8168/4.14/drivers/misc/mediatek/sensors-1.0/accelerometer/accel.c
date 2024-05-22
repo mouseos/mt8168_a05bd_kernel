@@ -145,8 +145,6 @@ static void acc_work_func(struct work_struct *work)
 acc_loop:
 	if (true == cxt->is_polling_run)
 		startTimer(&cxt->hrTimer, atomic_read(&cxt->delay), false);
-	else
-		pr_err("skip mod_timer: %d\n", cxt->is_polling_run);
 }
 
 enum hrtimer_restart acc_poll(struct hrtimer *timer)
@@ -173,7 +171,6 @@ static struct acc_context *acc_context_alloc_object(void)
 	}
 	atomic_set(&obj->delay, 200); /*5Hz,set work queue delay time 200ms */
 	atomic_set(&obj->wake, 0);
-	atomic_set(&obj->acc_pause, 0);
 	INIT_WORK(&obj->report, acc_work_func);
 	obj->accel_workqueue = NULL;
 	obj->accel_workqueue = create_workqueue("accel_polling");
@@ -205,13 +202,6 @@ static int acc_enable_and_batch(void)
 	struct acc_context *cxt = acc_context_obj;
 	int err;
 
-	if (atomic_read(&cxt->acc_pause)) {
-		cxt->is_acc_need_restore_polling = !!cxt->enable;
-		pr_err("already in pause, just save enable state: %d\n",
-			cxt->is_acc_need_restore_polling);
-		return -1;
-	}
-
 	/* power on -> power off */
 	if (cxt->power == 1 && cxt->enable == 0) {
 		pr_debug("ACC disable\n");
@@ -219,7 +209,6 @@ static int acc_enable_and_batch(void)
 		if (cxt->is_active_data == false &&
 		    cxt->acc_ctl.is_report_input_direct == false &&
 		    cxt->is_polling_run == true) {
-			cxt->is_polling_run = false;
 			smp_mb(); /* for memory barrier */
 			stopTimer(&cxt->hrTimer);
 			smp_mb(); /* for memory barrier */
@@ -783,60 +772,6 @@ int acc_flush_report(void)
 	err = sensor_input_event(acc_context_obj->mdev.minor, &event);
 	return err;
 }
-/* *************************************************** */
-int acc_driver_pause_polling(int en)
-{
-	struct acc_context *cxt = acc_context_obj;
-
-	pr_debug("%s: en=%d\n", __func__, en);
-
-	if (en) {
-		atomic_set(&cxt->acc_pause, 1);
-		if (cxt->is_polling_run) {
-			pr_info("%s: freeze als polling thread\n", __func__);
-			cxt->is_polling_run = false;
-			cxt->is_acc_need_restore_polling = true;
-			smp_mb();/* for memory barrier */
-			stopTimer(&cxt->hrTimer);
-			smp_mb();/* for memory barrier */
-			cancel_work_sync(&cxt->report);
-			cxt->drv_data.x = ACC_INVALID_VALUE;
-			cxt->drv_data.y = ACC_INVALID_VALUE;
-			cxt->drv_data.z = ACC_INVALID_VALUE;
-		}
-	} else {
-		atomic_set(&cxt->acc_pause, 0);
-		if (cxt->is_acc_need_restore_polling) {
-			pr_info("%s: restore acc polling thread\n", __func__);
-			cxt->is_polling_run = true;
-			cxt->is_acc_need_restore_polling = false;
-			startTimer(
-				&cxt->hrTimer, atomic_read(&cxt->delay), true);
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(acc_driver_pause_polling);
-
-int acc_driver_query_polling_state(void)
-{
-	int ret = 0;
-	struct acc_context *cxt = acc_context_obj;
-
-	if (cxt->is_acc_need_restore_polling)
-		ret = 1;
-	else
-		ret = 0;
-
-	pr_debug("%s: ret=%d\n", __func__, ret);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(acc_driver_query_polling_state);
-
-/* *************************************************** */
-
 static int acc_probe(void)
 {
 

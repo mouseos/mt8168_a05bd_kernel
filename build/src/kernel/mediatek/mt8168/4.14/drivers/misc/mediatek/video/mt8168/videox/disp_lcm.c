@@ -1405,21 +1405,6 @@ int disp_lcm_esd_recover(struct disp_lcm_handle *plcm)
 	return -1;
 }
 
-int disp_lcm_suspend_power(struct disp_lcm_handle *plcm)
-{
-	struct LCM_DRIVER *lcm_drv = NULL;
-
-	DISPFUNC();
-	if (_is_lcm_inited(plcm)) {
-		lcm_drv = plcm->drv;
-		if (lcm_drv->suspend_power)
-			lcm_drv->suspend_power();
-		return 0;
-	}
-	DISPERR("lcm_drv is null\n");
-	return -1;
-}
-
 int disp_lcm_suspend(struct disp_lcm_handle *plcm)
 {
 	struct LCM_DRIVER *lcm_drv = NULL;
@@ -1433,21 +1418,11 @@ int disp_lcm_suspend(struct disp_lcm_handle *plcm)
 			DISPERR("FATAL ERROR, lcm_drv->suspend is null\n");
 			return -1;
 		}
-		return 0;
-	}
-	DISPERR("lcm_drv is null\n");
-	return -1;
-}
 
-int disp_lcm_resume_power(struct disp_lcm_handle *plcm)
-{
-	struct LCM_DRIVER *lcm_drv = NULL;
+		if (lcm_drv->suspend_power)
+			lcm_drv->suspend_power();
 
-	DISPFUNC();
-	if (_is_lcm_inited(plcm)) {
-		lcm_drv = plcm->drv;
-		if (lcm_drv->resume_power)
-			lcm_drv->resume_power();
+
 		return 0;
 	}
 	DISPERR("lcm_drv is null\n");
@@ -1461,12 +1436,18 @@ int disp_lcm_resume(struct disp_lcm_handle *plcm)
 	DISPFUNC();
 	if (_is_lcm_inited(plcm)) {
 		lcm_drv = plcm->drv;
+
+		if (lcm_drv->resume_power)
+			lcm_drv->resume_power();
+
+
 		if (lcm_drv->resume) {
 			lcm_drv->resume();
 		} else {
 			DISPERR("FATAL ERROR, lcm_drv->resume is null\n");
 			return -1;
 		}
+
 		return 0;
 	}
 	DISPERR("lcm_drv is null\n");
@@ -1543,43 +1524,6 @@ int disp_lcm_set_backlight(struct disp_lcm_handle *plcm,
 	}
 
 	return 0;
-}
-
-int disp_lcm_set_backlight_mode(struct disp_lcm_handle *plcm, int mode)
-{
-	/*DISPFUNC(); */
-	struct  LCM_DRIVER *lcm_drv = NULL;
-
-	DISPFUNC();
-
-	if (_is_lcm_inited(plcm)) {
-		lcm_drv = plcm->drv;
-		if (lcm_drv->set_backlight_mode) {
-			lcm_drv->set_backlight_mode(mode);
-		} else {
-			DISPERR("ERROR, lcm_drv->set_backlight_mode is null\n");
-			return -1;
-		}
-
-		return 0;
-	}
-	DISPERR("lcm_drv is null\n");
-	return -1;
-}
-
-int disp_lcm_set_backlight_power_off(struct disp_lcm_handle *plcm)
-{
-	struct LCM_DRIVER *lcm_drv = NULL;
-
-	DISPFUNC();
-	if (_is_lcm_inited(plcm)) {
-		lcm_drv = plcm->drv;
-		if (lcm_drv->set_backlight_power_off)
-			lcm_drv->set_backlight_power_off();
-		return 0;
-	}
-	DISPERR("lcm_drv is null\n");
-	return -1;
 }
 
 int disp_lcm_ioctl(struct disp_lcm_handle *plcm, enum LCM_IOCTL ioctl,

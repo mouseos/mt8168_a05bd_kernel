@@ -244,6 +244,26 @@ int vbuf_std_alloc(struct vpu_device *vpu_device, struct vbuf_alloc *alloc_ctx)
 			return ret;
 		}
 
+		ret = idr_alloc(&vpu_device->addr_idr, vpub,
+				VPU_MIN_LOCAL_ADDR, VPU_ANY_ADDR - 1,
+				GFP_KERNEL);
+		if (ret < 0) {
+			LOG_ERR("failed idr_alloc\n");
+			__vpu_buf_mmap_free(vpub);
+			kfree(vpub);
+			mutex_unlock(&mng->buf_mutex);
+			return ret;
+		}
+
+		list_add_tail(vlist_link(vpub, struct vpu_kbuffer),
+			      &mng->buf_list);
+		mng->buf_num++;
+
+		alloc_ctx->handle = ret;
+		alloc_ctx->buf_size = vpub->length;
+		alloc_ctx->iova_addr = vpub->dma_addr;
+		alloc_ctx->iova_size = PAGE_ALIGN(vpub->length);
+
 		/* EXPORT BUF */
 		if (alloc_ctx->exp_flag) {
 			flags = O_RDWR | O_CLOEXEC;
@@ -279,28 +299,6 @@ int vbuf_std_alloc(struct vpu_device *vpu_device, struct vbuf_alloc *alloc_ctx)
 
 			alloc_ctx->exp_fd = ret;
 		}
-
-		ret = idr_alloc(&vpu_device->addr_idr, vpub,
-				VPU_MIN_LOCAL_ADDR, VPU_ANY_ADDR - 1,
-				GFP_KERNEL);
-		if (ret < 0) {
-			LOG_ERR("failed idr_alloc\n");
-			if (alloc_ctx->exp_flag)
-				dma_buf_put(dbuf);
-			__vpu_buf_mmap_free(vpub);
-			kfree(vpub);
-			mutex_unlock(&mng->buf_mutex);
-			return ret;
-		}
-
-		list_add_tail(vlist_link(vpub, struct vpu_kbuffer),
-			      &mng->buf_list);
-		mng->buf_num++;
-
-		alloc_ctx->handle = ret;
-		alloc_ctx->buf_size = vpub->length;
-		alloc_ctx->iova_addr = vpub->dma_addr;
-		alloc_ctx->iova_size = PAGE_ALIGN(vpub->length);
 
 		mutex_unlock(&mng->buf_mutex);
 	} else {

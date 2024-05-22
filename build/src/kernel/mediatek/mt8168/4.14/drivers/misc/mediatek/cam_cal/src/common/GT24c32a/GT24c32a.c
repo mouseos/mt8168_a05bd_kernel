@@ -89,7 +89,7 @@ static struct i2c_board_info kd_eeprom_dev __initdata = {
 /* EEPROM READ/WRITE ID */
 #define S24CS64A_DEVICE_ID				0xAA
 
-#define CAM_CAL_MAX_BUF_SIZE 65536/*For Safety, Can Be Adjusted*/
+
 
 /******************************************************************************
  *
@@ -215,9 +215,9 @@ static int iReadData(unsigned int  ui4_offset, unsigned int ui4_length,
 	u8 *pBuff;
 	/* EEPROMDB("[S24EEPORM] iReadData\n" ); */
 
-	if ((ui4_offset >= 0x2000) || (ui4_length >= 0x2000) || (ui4_offset + ui4_length >= 0x2000)) {
+	if (ui4_offset + ui4_length >= 0x2000) {
 		EEPROMDB(
-		"[GT24c32a] Read Error!! GT24c32a not supprt address >= 0x2000!!, offset:%u, length:%u\n", ui4_offset, ui4_length);
+		"[GT24c32a] Read Error!! GT24c32a not supprt address >= 0x2000!!\n");
 		return -1;
 	}
 
@@ -321,14 +321,6 @@ static long EEPROM_Ioctl(
 	}
 
 	ptempbuf = (stCAM_CAL_INFO_STRUCT *)pBuff;
-
-	if ((ptempbuf->u4Length <= 0) ||
-		(ptempbuf->u4Length > CAM_CAL_MAX_BUF_SIZE)) {
-		kfree(pBuff);
-		PK_DBG("Buffer Length Error!\n");
-		return -EFAULT;
-	}
-
 	pWorkingBuff = kmalloc(ptempbuf->u4Length, GFP_KERNEL);
 	if (pWorkingBuff == NULL) {
 		kfree(pBuff);

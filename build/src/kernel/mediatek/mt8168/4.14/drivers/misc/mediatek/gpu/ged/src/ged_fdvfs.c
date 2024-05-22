@@ -346,7 +346,7 @@ GED_ERROR ged_fdvfs_system_init(void)
 	g_timestamp = ged_get_time();
 
 #if 0
-	g_MFG_base = _mtk_of_ioremap("mediatek,abc123");
+	g_MFG_base = _mtk_of_ioremap("mediatek,AUSTIN");
 	if (g_MFG_base == NULL)
 		return GED_ERROR_FAIL;
 #endif

@@ -140,79 +140,6 @@ void _ddic_test_read(void)
 		read_table.data[2].byte3);
 
 }
-
-unsigned char do_vdo_dsi_read(unsigned char cmd)
-{
-	unsigned char reg_value = 0x00;
-	struct ddp_lcm_read_cmd_table read_table;
-		memset(&read_table, 0,
-		sizeof(struct ddp_lcm_read_cmd_table));
-	read_table.cmd[0] = cmd;
-	read_table.cmd[1] = cmd;
-	read_table.cmd[2] = cmd;
-
-	do_lcm_vdo_read(&read_table);
-
-	reg_value = read_table.data[0].byte0;
-
-	DDPDBG("after b0 %x, b1 %x, b2 %x, b3 = %x\n",
-		read_table.data[0].byte0,
-		read_table.data[0].byte1,
-		read_table.data[0].byte2,
-		read_table.data[0].byte3);
-	DDPDBG("after b0 %x, b1 %x, b2 %x, b3 = %x\n",
-		read_table.data[1].byte0,
-		read_table.data[1].byte1,
-		read_table.data[1].byte2,
-		read_table.data[1].byte3);
-	DDPDBG("after b0 %x, b1 %x, b2 %x, b3 = %x\n",
-		read_table.data[2].byte0,
-		read_table.data[2].byte1,
-		read_table.data[2].byte2,
-		read_table.data[2].byte3);
-
-	return reg_value;
-
-}
-
-void do_lp_write(unsigned char cmd, unsigned char *value)
-{
-	struct LCM_setting_table_V4 write_table;
-
-	write_table.id = DSI_DCS_SHORT_PACKET_ID_1;
-	write_table.cmd = cmd;
-	write_table.count = 1;
-	write_table.para_list[0] = *value;
-	write_table.flag = 0;
-
-	write_lcm_lp_by_cmdq(&write_table,
-		sizeof(write_table) / sizeof(struct LCM_setting_table_V4),
-		1);
-}
-
-unsigned char do_lp_read(unsigned char cmd)
-{
-	unsigned char reg_value = 0x00;
-	struct LCM_setting_table_V4 read_table;
-
-	memset(&read_table, 0, sizeof(struct LCM_setting_table_V4));
-
-	read_table.id = DSI_DCS_READ_PACKET_ID;
-	read_table.cmd = cmd;
-	read_table.count = 1;
-	read_table.para_list[0] = 0x0;
-	read_table.flag = 1;
-
-	reg_value = read_lcm_lp_by_cmdq(&read_table,
-		sizeof(read_table) / sizeof(struct LCM_setting_table_V4),
-		1);
-
-	DDPDBG("read 0x%x return 0x%x\n", read_table.cmd, reg_value);
-
-	return reg_value;
-
-}
-
 void _ddic_test_write(void)
 {
 	struct ddp_lcm_write_cmd_table write_table[5] = {
@@ -226,17 +153,6 @@ void _ddic_test_write(void)
 	do_lcm_vdo_lp_write(write_table, 5);
 
 }
-
-void do_vdo_dsi_write(unsigned char cmd, unsigned char count, unsigned char *para_list)
-{
-	struct ddp_lcm_write_cmd_table write_table = {0x00};
-	write_table.cmd = cmd;
-	write_table.count = count;
-	memcpy(write_table.para_list, para_list, count);
-
-	do_lcm_vdo_lp_write(&write_table, 1);
-}
-
 
 void _ddic_test_read_write(void)
 {
@@ -454,52 +370,6 @@ static void process_dbg_opt(const char *opt)
 		else if (test_type > 10)
 			_ddic_test_read_write();
 
-	} else if (strncmp(opt, "vdo_dsi_read:", 13) == 0) {
-		char *p = (char *)opt + 13;
-		unsigned int cmd;
-		unsigned char reg_value = 0x00;
-
-		ret = kstrtouint(p, 0, &cmd);
-		if (ret) {
-			snprintf(buf, 50, "error to parse cmd %s\n", opt);
-			return;
-		}
-		DISPERR("enter vdo_dsi_read!\n");
-		reg_value = do_vdo_dsi_read(cmd);
-
-		snprintf(buf, 50, "read reg:0x%x,value: 0x%x\n", cmd, reg_value);
-		return;
-	} else if (strncmp(opt, "vdo_dsi_write:", 14) == 0) {
-		int cmd;
-		int para_cnt, i;
-		char para[15] = {0};
-		static char fmt[256] = {0};
-		static const char temp[] = "vdo_dsi_write:0x%x";
-
-		DISPERR("enter vdo_dsi_write!\n");
-
-		memset(fmt, 0, sizeof(fmt));
-		strncpy((char *)fmt, (char *)temp, sizeof(temp));
-
-		for (i = 0; i < ARRAY_SIZE(para); i++)
-			strncat(fmt, ",0x%hhx", sizeof(fmt) - strlen(fmt) - 1);
-
-		strncat(fmt, "\n", sizeof(fmt) - strlen(fmt) - 1);
-
-		ret = sscanf(opt, fmt,
-			&cmd, &para[0], &para[1], &para[2], &para[3], &para[4],
-			&para[5], &para[6], &para[7], &para[8], &para[9],
-			&para[10], &para[11], &para[12], &para[13], &para[14]);
-
-		if (ret < 1 || ret > ARRAY_SIZE(para) + 1) {
-			snprintf(buf, 50, "error to parse cmd %s\n", opt);
-			return;
-		}
-
-		para_cnt = ret - 1;
-
-		do_vdo_dsi_write(cmd, para_cnt, para);
-		return;
 	} else if (strncmp(opt, "partial:", 8) == 0) {
 		ret = sscanf(opt, "partial:%d,%d,%d,%d,%d\n", &dbg_force_roi,
 			&dbg_partial_x, &dbg_partial_y, &dbg_partial_w,
@@ -757,51 +627,6 @@ static void process_dbg_opt(const char *opt)
 			tmp += snprintf(buf + tmp, buf_size_left - tmp,
 				"para[%d]=0x%x,", i, para[i]);
 		DISPMSG("%s\n", buf);
-	} else if (strncmp(opt, "set_lp_cmd:", 11) == 0) {
-		int cmd;
-		int para_cnt, i;
-		char para[15] = {0};
-		char fmt[256] = "set_lp_cmd:0x%x";
-
-		for (i = 0; i < ARRAY_SIZE(para); i++) {
-			/* make fmt like: "set_lp_cmd:0x%x,0x%hhx,0x%hhx\n" */
-			strncat(fmt, ",0x%hhx", sizeof(fmt) - strlen(fmt) - 1);
-		}
-		strncat(fmt, "\n", sizeof(fmt) - strlen(fmt) - 1);
-
-		ret = sscanf(opt, fmt,
-			&cmd, &para[0], &para[1], &para[2], &para[3], &para[4],
-			&para[5], &para[6], &para[7], &para[8], &para[9],
-			&para[10], &para[11], &para[12], &para[13], &para[14]);
-
-		if (ret < 1 || ret > ARRAY_SIZE(para) + 1) {
-			snprintf(buf, 50, "error to parse cmd %s\n", opt);
-			return;
-		}
-
-		para_cnt = ret - 1;
-
-		do_lp_write(cmd, para);
-
-		DISPMSG("set_lp_cmd cmd=0x%x\n", cmd);
-		for (i = 0; i < para_cnt; i++)
-			DISPMSG("para[%d] = 0x%x\n", i, para[i]);
-	} else if (strncmp(opt, "get_lp_cmd:", 11) == 0) {
-		char *p = (char *)opt + 11;
-		unsigned int cmd;
-		unsigned char reg_value = 0x00;
-
-		ret = kstrtouint(p, 0, &cmd);
-		if (ret) {
-			snprintf(buf, 50, "error to parse cmd %s\n", opt);
-			return;
-		}
-
-		DDPMSG("enter get_lp_cmd!\n");
-		reg_value = do_lp_read(cmd);
-
-		snprintf(buf, 50, "read reg:0x%02x,value:0x%02x\n",
-			cmd, reg_value);
 	} else {
 		dbg_buf[0] = '\0';
 		goto Error;

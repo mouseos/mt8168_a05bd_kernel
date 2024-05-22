@@ -7849,8 +7849,8 @@ struct task_group *sched_create_group(struct task_group *parent)
 
 #if defined(CONFIG_UCLAMP_TASK_GROUP) && !defined(CONFIG_SCHED_TUNE)
 	if (!alloc_uclamp_sched_group(tg, parent))
-		goto err;
 #endif
+		goto err;
 
 	return tg;
 

@@ -131,6 +131,18 @@ config VIDEO_S3C_CAMIF
 	  To compile this driver as a module, choose M here: the module
 	  will be called s3c-camif.
 
+config VIDEO_MEDIATEK_CAMERA
+	tristate "Mediatek V4L2 Camera Driver"
+	depends on VIDEO_DEV && VIDEO_V4L2
+	select VIDEOBUF2_DMA_CONTIG
+	select VIDEO_MEDIATEK_VCU
+	---help---
+	  Mediatek V4L2 Camera driver for V4L2
+	  Default is disable.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called mtk-camera.
+
 config VIDEO_STM32_DCMI
 	tristate "STM32 Digital Camera Memory Interface (DCMI) support"
 	depends on VIDEO_V4L2 && OF && HAS_DMA
@@ -198,7 +210,7 @@ config VIDEO_IMX_VDOA
 
 config VIDEO_MEDIATEK_JPEG
 	tristate "Mediatek JPEG Codec driver"
-	depends on MTK_IOMMU_V1 || COMPILE_TEST
+	depends on MTK_IOMMU_V1 || COMPILE_TEST || MTK_IOMMU
 	depends on VIDEO_DEV && VIDEO_V4L2
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	depends on HAS_DMA
@@ -302,6 +314,21 @@ config VIDEO_MEDIATEK_WARP
 
 	   To compile this driver as a module, choose M here: the
 	   module will be called mtk-warp.
+
+config VIDEO_MEDIATEK_MDP_VCU
+        tristate "Mediatek MDP driver which depends on VCU"
+        depends on VIDEO_DEV && VIDEO_V4L2
+        depends on HAS_DMA
+        select VIDEOBUF2_DMA_CONTIG
+        select V4L2_MEM2MEM_DEV
+        select VIDEO_MEDIATEK_VCU
+        select MTK_CMDQ
+        ---help---
+            It is a v4l2 driver which depends on VCU driver.
+            The driver supports for scaling and color space conversion.
+
+            To compile this driver as a module, choose M here: the
+            module will be called mtk-mdp.
 
 config VIDEO_MEM2MEM_DEINTERLACE
 	tristate "Deinterlace support"

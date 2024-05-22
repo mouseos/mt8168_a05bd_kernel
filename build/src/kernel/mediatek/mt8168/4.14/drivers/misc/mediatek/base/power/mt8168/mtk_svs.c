@@ -727,11 +727,6 @@ static inline void svs_init01_isr_handler(struct mtk_svs *svs)
 
 	svsb->age_voffset_in = svs_readl(svs, AGEVALUES) & 0xffff;
 
-	/* always dump the Vproc DC offset here, that is the gap data we want to track & statistic */
-	pr_notice("[SVS] INIT2VALS %d, %d, VDESIGN30 %d\n",
-		  svsb->dc_voffset_in & 0xffff, svsb->age_voffset_in,
-		  svs_readl(svs, VDESIGN30) & 0xff);
-
 	svs_writel(svs, 0x0, SVSEN);
 	svs_writel(svs, 0x1, INTSTS);
 

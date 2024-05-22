@@ -1645,15 +1645,20 @@ static void __mt_gpufreq_vcore_volt_switch(unsigned int volt_target)
 #ifdef CONFIG_MTK_QOS_SUPPORT
 	if (volt_target > 70000) {
 		pm_qos_update_request(&g_pmic->pm_vgpu, VCORE_OPP_0);
+		pm_qos_update_request(&g_pmic->pm_v_emi_gpu, DDR_OPP_0);
 		g_cur_vcore_opp = VCORE_OPP_0;
 	} else if (volt_target > 65000) {
 		pm_qos_update_request(&g_pmic->pm_vgpu, VCORE_OPP_1);
+		pm_qos_update_request(&g_pmic->pm_v_emi_gpu, DDR_OPP_1);
 		g_cur_vcore_opp = VCORE_OPP_1;
 	} else if (volt_target > 0) {
 		pm_qos_update_request(&g_pmic->pm_vgpu, VCORE_OPP_2);
+		pm_qos_update_request(&g_pmic->pm_v_emi_gpu, DDR_OPP_2);
 		g_cur_vcore_opp = VCORE_OPP_2;
-	} else			/* UNREQUEST */
+	} else {			/* UNREQUEST */
 		pm_qos_update_request(&g_pmic->pm_vgpu, VCORE_OPP_UNREQ);
+		pm_qos_update_request(&g_pmic->pm_v_emi_gpu, DDR_OPP_UNREQ);
+	}
 	gpufreq_pr_debug("@%s:volt_target = %d, cur_v = %d\n",
 		__func__, volt_target, mt_gpufreq_get_cur_volt());
 #endif
@@ -2708,6 +2713,8 @@ static int __mt_gpufreq_init_pmic(struct platform_device *pdev)
 #else
 #ifdef CONFIG_MTK_QOS_SUPPORT
 	pm_qos_add_request(&g_pmic->pm_vgpu, PM_QOS_VCORE_OPP, VCORE_OPP_0);
+	pm_qos_add_request(&g_pmic->pm_v_emi_gpu, PM_QOS_EMI_OPP, DDR_OPP_0);
+
 #endif
 	g_pmic->reg_vcore = regulator_get(&pdev->dev, "vcore");
 	if (IS_ERR(g_pmic->reg_vcore)) {

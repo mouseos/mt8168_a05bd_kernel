@@ -92,7 +92,6 @@ enum {
 	CHARGER_DEV_NOTIFY_EOC,
 	CHARGER_DEV_NOTIFY_RECHG,
 	CHARGER_DEV_NOTIFY_SAFETY_TIMEOUT,
-	CHARGER_DEV_NOTIFY_VBUS_EVENT,
 };
 
 /*
@@ -112,14 +111,6 @@ enum sw_jeita_state_enum {
 	TEMP_ABOVE_T4
 };
 
-enum adapter_power_category {
-	ADAPTER_5W = 0,
-	ADAPTER_7_5W,
-	ADAPTER_9W,
-	ADAPTER_12W,
-	ADAPTER_15W,
-};
-
 struct sw_jeita_data {
 	int sm;
 	int pre_sm;
@@ -135,12 +126,6 @@ enum bat_temp_state_enum {
 	BAT_TEMP_HIGH
 };
 
-enum vbus_voltage_state {
-	VBUS_NORMAL = 0,
-	VBUS_OVP,
-	VBUS_UVLO
-};
-
 struct battery_thermal_protection_data {
 	int sm;
 	bool enable_min_charge_temp;
@@ -152,10 +137,6 @@ struct battery_thermal_protection_data {
 
 struct charger_custom_data {
 	int battery_cv;	/* uv */
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	int battery_cv_aging1;	/* uv */
-	int battery_cv_aging2;	/* uv */
-#endif
 	int max_charger_voltage;
 	int max_charger_voltage_setting;
 	int min_charger_voltage;
@@ -172,12 +153,6 @@ struct charger_custom_data {
 	int apple_2_1a_charger_current;
 	int ta_ac_charger_current;
 	int pd_charger_current;
-	int wireless_5w_charger_input_current;
-	int wireless_5w_charger_current;
-	int wireless_10w_charger_input_current;
-	int wireless_10w_charger_current;
-	int wireless_default_charger_input_current;
-	int wireless_default_charger_current;
 
 	/* sw jeita */
 	int jeita_temp_above_t4_cv;
@@ -186,21 +161,6 @@ struct charger_custom_data {
 	int jeita_temp_t1_to_t2_cv;
 	int jeita_temp_t0_to_t1_cv;
 	int jeita_temp_below_t0_cv;
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	int jeita_temp_above_t4_cv_voltage_aging1;
-	int jeita_temp_t3_to_t4_cv_voltage_aging1;
-	int jeita_temp_t2_to_t3_cv_voltage_aging1;
-	int jeita_temp_t1_to_t2_cv_voltage_aging1;
-	int jeita_temp_t0_to_t1_cv_voltage_aging1;
-	int jeita_temp_below_t0_cv_voltage_aging1;
-
-	int jeita_temp_above_t4_cv_voltage_aging2;
-	int jeita_temp_t3_to_t4_cv_voltage_aging2;
-	int jeita_temp_t2_to_t3_cv_voltage_aging2;
-	int jeita_temp_t1_to_t2_cv_voltage_aging2;
-	int jeita_temp_t0_to_t1_cv_voltage_aging2;
-	int jeita_temp_below_t0_cv_voltage_aging2;
-#endif
 	int temp_t4_thres;
 	int temp_t4_thres_minus_x_degree;
 	int temp_t3_thres;
@@ -213,8 +173,6 @@ struct charger_custom_data {
 	int temp_t0_thres_plus_x_degree;
 	int temp_neg_10_thres;
 
-	int temp_t0_charging_current_limit;
-	int temp_t3_charging_current_limit;
 	/* battery temperature protection */
 	int mtk_temperature_recharge_support;
 	int max_charge_temp;
@@ -270,7 +228,6 @@ struct charger_custom_data {
 struct charger_data {
 	int force_charging_current;
 	int thermal_input_current_limit;
-	int thermal_input_power_limit;
 	int thermal_charging_current_limit;
 	int input_current_limit;
 	int charging_current_limit;
@@ -278,20 +235,6 @@ struct charger_data {
 	int input_current_limit_by_aicl;
 	int junction_temp_min;
 	int junction_temp_max;
-	int force_input_current_limit;
-};
-
-struct power_detection_data {
-	bool en;
-	int iusb_ua;
-	int type;
-	int adapter_9w_aicl_min;
-	int adapter_12w_aicl_min;
-	int adapter_5w_iusb_lim;
-	int adapter_9w_iusb_lim;
-	int adapter_12w_iusb_lim;
-	int aicl_trigger_iusb;
-	int aicl_trigger_ichg;
 };
 
 struct charger_manager {
@@ -353,9 +296,6 @@ struct charger_manager {
 
 	bool enable_sw_safety_timer;
 	bool sw_safety_timer_setting;
-	bool thermal_throttling_by_psy;
-	bool dcap_support;
-	bool dcap_enable;
 
 	/* High voltage charging */
 	bool enable_hv_charging;
@@ -398,47 +338,9 @@ struct charger_manager {
 
 	/* kpoc */
 	atomic_t enable_kpoc_shdn;
-	/* top-off mode */
-	struct timespec chr_plug_in_time;
-	__kernel_time_t top_off_mode_time_threshold;
-	int custom_charging_cv;
-	int top_off_mode_cv;
-
-	__kernel_time_t custom_plugin_time;
-	unsigned int top_off_mode_enable; /* 0=ratail unit, 1=demo unit */
-
-	int vbat_exit_top_off_mode;
-
-	bool enable_top_off_mode_debounce;
-	/* The disconnection time to keep top-off mode. */
-	__kernel_time_t top_off_mode_keep_time;
-	/* Enable the feature detect bad charger */
-	bool enable_bat_eoc_protect;
-	bool bat_eoc_protect;
-	uint32_t soc_exit_eoc;
-
-	struct timespec disconnect_time;
-	__kernel_time_t disconnect_duration;
-	__kernel_time_t bat_eoc_protect_reset_time;
-	__kernel_time_t sw_safety_timer_reset_time;
-
-	__kernel_time_t backup_top_off_mode_keep_time;
-	__kernel_time_t backup_bat_eoc_protect_reset_time;
-	__kernel_time_t backup_max_charging_time;
 
 	/* ATM */
 	bool atm_enabled;
-
-	unsigned long top_off_difference_full_cv;
-	unsigned long normal_difference_full_cv;
-
-	/* Adapter Power Detection */
-	struct power_detection_data power_detection;
-	struct wakeup_source cable_wakelock;
-
-	/* For SW UVLO/OVP protection */
-	int vbus_state;
-	bool vbus_recovery_from_uvlo;
 };
 
 /* charger related module interface */
@@ -451,7 +353,6 @@ extern int mtk_get_dynamic_cv(struct charger_manager *info, unsigned int *cv);
 extern bool is_dual_charger_supported(struct charger_manager *info);
 extern int charger_enable_vbus_ovp(struct charger_manager *pinfo, bool enable);
 extern bool is_typec_adapter(struct charger_manager *info);
-extern bool is_charger_invalid(void);
 
 /* pmic API */
 extern unsigned int upmu_get_rgs_chrdet(void);
@@ -462,7 +363,6 @@ extern int pmic_get_bif_battery_voltage(int *vbat);
 extern int pmic_is_bif_exist(void);
 extern int pmic_enable_hw_vbus_ovp(bool enable);
 extern bool pmic_is_battery_exist(void);
-extern int mtk_get_battery_cv(struct charger_manager *info);
 
 /* FIXME */
 enum usb_state_enum {

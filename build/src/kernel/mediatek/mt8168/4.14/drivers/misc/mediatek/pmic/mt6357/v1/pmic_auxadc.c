@@ -481,7 +481,7 @@ int pmic_get_auxadc_value(int list)
 		is_charging = gauge_get_current(&bat_cur);
 		if (is_charging == 0)
 			bat_cur = 0 - bat_cur;
-		HKLOG("[CH3_DBG] bat_cur = %d\n", bat_cur);
+		pr_notice("[CH3_DBG] bat_cur = %d\n", bat_cur);
 	}
 #endif
 	if (list == AUXADC_LIST_HPOFS_CAL) {

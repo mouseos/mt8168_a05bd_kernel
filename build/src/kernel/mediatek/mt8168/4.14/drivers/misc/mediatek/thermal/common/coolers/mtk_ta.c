@@ -138,14 +138,8 @@ void atm_ctrl_cmd_from_user(void *nl_data, struct tad_nl_msg_t *ret_msg)
 		break;
 	case TA_DAEMON_CMD_GET_TPCB:
 		{
-#ifdef CONFIG_COOLER_ADAPTIVE_BTS
-			int curr_tpcb = mtk_thermal_get_temp(
-							MTK_THERMAL_SENSOR_BTS0);
-#else
-
 			int curr_tpcb = mtk_thermal_get_temp(
 							MTK_THERMAL_SENSOR_AP);
-#endif
 
 			ret_msg->tad_data_len += sizeof(curr_tpcb);
 			memcpy(ret_msg->tad_data, &curr_tpcb,

@@ -131,7 +131,9 @@ enum IMGSENSOR_RETURN imgsensor_i2c_init(
 		struct IMGSENSOR_I2C_CFG *pi2c_cfg,
 		enum IMGSENSOR_I2C_DEV device)
 {
-	if (!pi2c_cfg || device >= IMGSENSOR_I2C_DEV_MAX_NUM)
+	if (!pi2c_cfg ||
+			device >= IMGSENSOR_I2C_DEV_MAX_NUM ||
+			device < IMGSENSOR_I2C_DEV_0)
 		return IMGSENSOR_RETURN_ERROR;
 
 	pi2c_cfg->pinst       = &gi2c.inst[device];
@@ -201,8 +203,12 @@ enum IMGSENSOR_RETURN imgsensor_i2c_read(
 
 		if (__ratelimit(&ratelimit))
 			cam_pr_err(
-			"I2C read failed (0x%x)! speed(0=%d) (0x%x)\n",
-			ret, speed, *pwrite_data);
+			"I2C read failed (0x%x)! speed(0=%d) (0x%x), i2c_transfer %d\n",
+			ret, speed, *pwrite_data,
+			i2c_transfer(
+				pinst->pi2c_client->adapter,
+				pinst->msg,
+				IMGSENSOR_I2C_MSG_SIZE_READ));
 		ret = IMGSENSOR_RETURN_ERROR;
 	}
 
@@ -244,18 +250,22 @@ enum IMGSENSOR_RETURN imgsensor_i2c_write(
 		pdata += write_per_cycle;
 	}
 
-	if (i2c_transfer(
+	if (i != i2c_transfer(
 		pinst->pi2c_client->adapter,
 		pinst->msg,
-		i) < 0) {
+		i)) {
 		static DEFINE_RATELIMIT_STATE(ratelimit, 1 * HZ, 30);
 
 		if (__ratelimit(&ratelimit))
 			cam_pr_err(
-				"I2C write failed (0x%x)! speed(0=%d) (0x%x)\n",
+				"I2C write failed (0x%x)! speed(0=%d) (0x%02x%02x), i2c_transfer %d\n",
 				ret,
 				speed,
-				*pwrite_data);
+				*pwrite_data, *(pwrite_data+1),
+				i2c_transfer(
+					pinst->pi2c_client->adapter,
+					pinst->msg,
+					i));
 		ret = IMGSENSOR_RETURN_ERROR;
 	}
 

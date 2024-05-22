@@ -28,7 +28,6 @@
 #include "cmdq_def.h"
 #include "cmdq_mdp_common.h"
 #include "cmdq_driver.h"
-#include "cmdq_mdp_pmqos.h"
 #endif
 #include "mdp_def_ex.h"
 #include "mdp_ioctl_ex.h"
@@ -248,14 +247,9 @@ static s32 mdp_process_read_request(struct mdp_read_readback *req_user)
 		CMDQ_SYSTRACE_END();
 	} while (0);
 
-	if (ids)
-		kfree(ids);
-
-	if (addrs)
-		kfree(addrs);
-
-	if (values)
-		kfree(values);
+	kfree(ids);
+	kfree(addrs);
+	kfree(values);
 
 	CMDQ_SYSTRACE_END();
 	return status;
@@ -271,11 +265,6 @@ static unsigned long translate_fd(struct op_meta *meta,
 
 	if (!port)
 		return 0;
-
-	if (mapping_job->handle_count >= MAX_HANDLE_NUM) {
-		CMDQ_ERR("%s mapping_job->handle_count >= MAX_HANDLE_NUM\n", __func__);
-		return 0;
-	}
 
 	for (i = 0; i < mapping_job->handle_count; i++)
 		if (mapping_job->fds[i] == meta->fd)
@@ -450,6 +439,7 @@ static s32 translate_user_job(struct mdp_submit *user_job,
 	exec_cost = div_s64(sched_clock() - exec_cost, 1000);
 	CMDQ_MSG("[log]%s copy from user cost:%lluus\n", __func__, exec_cost);
 
+	cmdq_mdp_meta_replace_sec_addr(metas, user_job, handle);
 #ifdef TRACK_PERF_MON
 	memset(trans_perf_mon_cost, 0, sizeof(u64)*CMDQ_MOP_NOP);
 	memset(trans_perf_mon_count, 0, sizeof(u32)*CMDQ_MOP_NOP);
@@ -480,7 +470,6 @@ static s32 cmdq_mdp_handle_setup(struct mdp_submit *user_job,
 				struct task_private *desc_private,
 				struct cmdqRecStruct *handle)
 {
-	u32 iprop_size = sizeof(struct mdp_pmqos);
 #ifndef MDP_META_IN_LEGACY_V2
 	const u64 inorder_mask = 1ll << CMDQ_ENG_INORDER;
 
@@ -493,22 +482,14 @@ static s32 cmdq_mdp_handle_setup(struct mdp_submit *user_job,
 
 	if (desc_private)
 		handle->node_private = desc_private->node_private_data;
-#else
-	handle->engineFlag = user_job->engine_flag;
-	handle->priority = user_job->priority;
-#endif
 
 	if (user_job->prop_size && user_job->prop_addr &&
 		user_job->prop_size < CMDQ_MAX_USER_PROP_SIZE) {
-		handle->prop_addr = kzalloc(iprop_size, GFP_KERNEL);
-		if (!handle->prop_addr) {
-			CMDQ_ERR("Can't allocate memory for cmdq mdp handle\n");
-			return -ENOMEM;
-		}
-		handle->prop_size = iprop_size;
+		handle->prop_addr = kzalloc(user_job->prop_size, GFP_KERNEL);
+		handle->prop_size = user_job->prop_size;
 		if (copy_from_user(handle->prop_addr,
 				CMDQ_U32_PTR(user_job->prop_addr),
-				iprop_size)) {
+				user_job->prop_size)) {
 			CMDQ_ERR("copy prop_addr from user fail\n");
 			return -EINVAL;
 		}
@@ -516,7 +497,10 @@ static s32 cmdq_mdp_handle_setup(struct mdp_submit *user_job,
 		handle->prop_addr = NULL;
 		handle->prop_size = 0;
 	}
-
+#else
+	handle->engineFlag = user_job->engine_flag;
+	handle->priority = user_job->priority;
+#endif
 	return 0;
 }
 
@@ -762,14 +746,8 @@ s32 mdp_ioctl_async_wait(unsigned long param)
 		CMDQ_LOG("[warn]job wait and close cost:%lluus handle:0x%p\n",
 			exec_cost, handle);
 
-	for (i = 0; i < mapping_job->handle_count; i++) {
-		if (i >= MAX_HANDLE_NUM) {
-			CMDQ_ERR("%s mapping_job->handle_count >= MAX_HANDLE_NUM\n", __func__);
-			status = -EFAULT;
-			break;
-		}
+	for (i = 0; i < mapping_job->handle_count; i++)
 		mdp_ion_free_handle(mapping_job->handles[i]);
-	}
 
 	kfree(mapping_job);
 	CMDQ_SYSTRACE_BEGIN("%s destroy\n", __func__);
@@ -806,7 +784,7 @@ s32 mdp_ioctl_alloc_readback_slots(void *fp, unsigned long param)
 
 	mutex_lock(&rb_slot_list_mutex);
 	free_slot_group = ffz(alloc_slot_group);
-	if (unlikely(alloc_slot_group == ~0UL)) {
+	if (unlikely(free_slot_group >= SLOT_GROUP_NUM)) {
 		CMDQ_ERR("%s no free slot:%#llx\n", __func__, alloc_slot_group);
 		cmdq_free_write_addr(paStart, CMDQ_CLT_MDP);
 		mutex_unlock(&rb_slot_list_mutex);
@@ -814,7 +792,7 @@ s32 mdp_ioctl_alloc_readback_slots(void *fp, unsigned long param)
 	}
 	/* find slot id */
 	free_slot = ffz(alloc_slot[free_slot_group]);
-	if (unlikely(alloc_slot[free_slot_group] == ~0UL)) {
+	if (unlikely(free_slot >= 64)) {
 		CMDQ_ERR("%s not found free slot in %u: %#llx\n", __func__,
 			free_slot_group, alloc_slot[free_slot_group]);
 		cmdq_free_write_addr(paStart, CMDQ_CLT_MDP);
@@ -822,15 +800,14 @@ s32 mdp_ioctl_alloc_readback_slots(void *fp, unsigned long param)
 		return -EFAULT;
 	}
 	alloc_slot[free_slot_group] |= 1LL << free_slot;
-	if (alloc_slot[free_slot_group] == ~0UL)
+	if (ffz(alloc_slot[free_slot_group]) == 64)
 		alloc_slot_group |= 1LL << free_slot_group;
 
 	alloc_slot_index = free_slot + free_slot_group * 64;
 	rb_slot[alloc_slot_index].count = rb_req.count;
 	rb_slot[alloc_slot_index].pa_start = paStart;
 	rb_slot[alloc_slot_index].fp = fp;
-	CMDQ_MSG("%s get 0x%pa in %d, fp:%p\n", __func__,
-		&paStart, alloc_slot_index, fp);
+	CMDQ_MSG("%s get 0x%pa in %d\n", __func__, &paStart, alloc_slot_index);
 	CMDQ_MSG("%s alloc slot[%d] %#llx, %#llx\n", __func__, free_slot_group,
 		alloc_slot[free_slot_group], alloc_slot_group);
 	mutex_unlock(&rb_slot_list_mutex);
@@ -888,15 +865,13 @@ s32 mdp_ioctl_free_readback_slots(void *fp, unsigned long param)
 		return -EINVAL;
 	}
 	alloc_slot[free_slot_group] &= ~(1LL << free_slot);
-	if (alloc_slot[free_slot_group] != ~0UL)
+	if (ffz(alloc_slot[free_slot_group]) != 64)
 		alloc_slot_group &= ~(1LL << free_slot_group);
 
 	paStart = rb_slot[free_slot_index].pa_start;
 	rb_slot[free_slot_index].count = 0;
 	rb_slot[free_slot_index].pa_start = 0;
-	CMDQ_MSG("%s free 0x%pa in %d, fp:%p\n", __func__,
-		&paStart, free_slot_index, rb_slot[free_slot_index].fp);
-	rb_slot[free_slot_index].fp = NULL;
+	CMDQ_MSG("%s free 0x%pa in %d\n", __func__, &paStart, free_slot_index);
 	CMDQ_MSG("%s alloc slot[%d] %#llx, %#llx\n", __func__, free_slot_group,
 		alloc_slot[free_slot_group], alloc_slot_group);
 	mutex_unlock(&rb_slot_list_mutex);
@@ -1038,7 +1013,6 @@ int mdp_limit_dev_create(struct platform_device *device)
 	mdp_limit_cdev = cdev_alloc();
 	mdp_limit_cdev->owner = THIS_MODULE;
 	mdp_limit_cdev->ops = &mdp_op_ex;
-
 #ifdef MDP_LIMIT_NODE
 	status = alloc_chrdev_region(&mdp_limit_dev_no, 0, 1,
 		MDP_LIMIT_DRIVER_DEVICE_NAME);

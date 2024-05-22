@@ -61,10 +61,8 @@ static void charger_device_release(struct device *dev)
 
 int charger_dev_enable(struct charger_device *chg_dev, bool en)
 {
-	if (chg_dev != NULL && chg_dev->ops != NULL && chg_dev->ops->enable) {
-		dev_info(&chg_dev->dev, "%s: en=%d\n", __func__, en);
+	if (chg_dev != NULL && chg_dev->ops != NULL && chg_dev->ops->enable)
 		return chg_dev->ops->enable(chg_dev, en);
-	}
 
 	return -ENOTSUPP;
 }
@@ -136,17 +134,6 @@ int charger_dev_get_min_charging_current(struct charger_device *chg_dev,
 	return -ENOTSUPP;
 }
 EXPORT_SYMBOL(charger_dev_get_min_charging_current);
-
-int charger_dev_switch_power_state(struct charger_device *chg_dev,
-					int level)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-	    chg_dev->ops->switch_power_state)
-		return chg_dev->ops->switch_power_state(chg_dev, level);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(charger_dev_switch_power_state);
 
 int charger_dev_enable_chip(struct charger_device *chg_dev, bool en)
 {
@@ -337,15 +324,6 @@ int charger_dev_set_mivr(struct charger_device *chg_dev, u32 uV)
 	return -ENOTSUPP;
 }
 EXPORT_SYMBOL(charger_dev_set_mivr);
-
-int charger_dev_get_mivr(struct charger_device *chg_dev, u32 *uV)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL && chg_dev->ops->get_mivr)
-		return chg_dev->ops->get_mivr(chg_dev, uV);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(charger_dev_get_mivr);
 
 int charger_dev_enable_powerpath(struct charger_device *chg_dev, bool en)
 {
@@ -551,76 +529,6 @@ int charger_dev_reset_eoc_state(struct charger_device *chg_dev)
 	return -ENOTSUPP;
 }
 EXPORT_SYMBOL(charger_dev_reset_eoc_state);
-
-int charger_dev_enable_ir_comp(struct charger_device *charger_dev, bool en)
-{
-	if (charger_dev != NULL && charger_dev->ops != NULL && charger_dev->ops->enable_ir_comp)
-		return charger_dev->ops->enable_ir_comp(charger_dev, en);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(charger_dev_enable_ir_comp);
-
-int wireless_charger_dev_get_online(struct charger_device *chg_dev, bool *stat)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-	    chg_dev->ops->get_wpc_online)
-		return chg_dev->ops->get_wpc_online(chg_dev, stat);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(wireless_charger_dev_get_online);
-
-int wireless_charger_dev_do_algorithm(
-			struct charger_device *chg_dev, void *data)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-	    chg_dev->ops->do_wpc_algorithm)
-		return chg_dev->ops->do_wpc_algorithm(chg_dev, data);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(wireless_charger_dev_do_algorithm);
-
-int wireless_charger_dev_force_en_charge(struct charger_device *chg_dev, bool en)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-		chg_dev->ops->force_enable_wpc_charge)
-		return chg_dev->ops->force_enable_wpc_charge(chg_dev, en);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(wireless_charger_dev_force_en_charge);
-
-int wireless_charger_dev_get_temp(struct charger_device *chg_dev)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-		chg_dev->ops->get_temp)
-		return chg_dev->ops->get_temp(chg_dev);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(wireless_charger_dev_get_temp);
-
-int wireless_charger_dev_set_wpc_en(struct charger_device *chg_dev, bool en)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-		chg_dev->ops->set_wpc_en)
-		return chg_dev->ops->set_wpc_en(chg_dev, en);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(wireless_charger_dev_set_wpc_en);
-
-int wireless_charger_dev_set_sleep_en(struct charger_device *chg_dev, bool en)
-{
-	if (chg_dev != NULL && chg_dev->ops != NULL &&
-		chg_dev->ops->set_sleep_en)
-		return chg_dev->ops->set_sleep_en(chg_dev, en);
-
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL(wireless_charger_dev_set_sleep_en);
 
 int charger_dev_safety_check(struct charger_device *chg_dev)
 {

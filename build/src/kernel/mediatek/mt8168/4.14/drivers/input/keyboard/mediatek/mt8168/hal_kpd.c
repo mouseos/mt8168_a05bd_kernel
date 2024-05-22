@@ -106,7 +106,7 @@ void long_press_reboot_function_setting(void)
 		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
 #endif
 	}
-	pmic_set_register_value(PMIC_TMA_KEY, 0x0);
+	pmic_set_register_value(PMIC_TMA_KEY, 0);
 #endif
 }
 
@@ -186,14 +186,8 @@ void vol_up_long_press(unsigned long pressed)
 void kpd_pmic_rstkey_hal(unsigned long pressed)
 {
 	if (kpd_dts_data.kpd_sw_rstkey != 0) {
-#ifdef CONFIG_KPD_VOLUME_KEY_SWAP
-		u32 linux_kyecode = kpd_get_linux_key_code(
-					kpd_dts_data.kpd_sw_rstkey, pressed);
-		input_report_key(kpd_input_dev, linux_kyecode, pressed);
-#else
 		input_report_key(kpd_input_dev, kpd_dts_data.kpd_sw_rstkey,
 				pressed);
-#endif
 		input_sync(kpd_input_dev);
 		kpd_print(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
 			pressed ? "pressed" : "released",

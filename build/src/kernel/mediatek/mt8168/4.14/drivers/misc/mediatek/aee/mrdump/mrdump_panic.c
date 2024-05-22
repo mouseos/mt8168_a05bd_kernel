@@ -34,9 +34,6 @@
 #endif
 #include "mrdump_private.h"
 #include "mrdump_mini.h"
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-#include <linux/sign_of_life.h>
-#endif
 
 #ifdef mrdump_virt_addr_valid
 #undef mrdump_virt_addr_valid
@@ -174,26 +171,18 @@ int mrdump_common_die(int fiq_step, int reboot_reason, const char *msg,
 
 	switch (reboot_reason) {
 	case AEE_REBOOT_MODE_KERNEL_OOPS:
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-		life_cycle_set_boot_reason(WARMBOOT_BY_KERNEL_PANIC);
-#endif
 #ifdef CONFIG_MTK_RAM_CONSOLE
 		aee_rr_rec_exp_type(AEE_EXP_TYPE_KE);
 #endif
 		__show_regs(regs);
 		dump_stack();
-		dump_instr(KERN_EMERG, regs);
 		break;
 	case AEE_REBOOT_MODE_KERNEL_PANIC:
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-		life_cycle_set_boot_reason(WARMBOOT_BY_KERNEL_PANIC);
-#endif
 #ifdef CONFIG_MTK_RAM_CONSOLE
 		aee_rr_rec_exp_type(AEE_EXP_TYPE_KE);
 #endif
 #ifndef CONFIG_DEBUG_BUGVERBOSE
 		dump_stack();
-		dump_instr(KERN_EMERG, regs);
 #endif
 		break;
 	case AEE_REBOOT_MODE_HANG_DETECT:
@@ -201,12 +190,6 @@ int mrdump_common_die(int fiq_step, int reboot_reason, const char *msg,
 		aee_rr_rec_exp_type(AEE_EXP_TYPE_HANG_DETECT);
 #endif
 		break;
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-	case AEE_REBOOT_MODE_WDT:
-	case AEE_REBOOT_MODE_MRDUMP_KEY:
-		life_cycle_set_boot_reason(WARMBOOT_BY_KERNEL_WATCHDOG);
-		break;
-#endif
 	default:
 		/* Don't print anything */
 		break;

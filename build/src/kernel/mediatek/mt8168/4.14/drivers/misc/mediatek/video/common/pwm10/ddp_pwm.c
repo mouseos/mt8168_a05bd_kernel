@@ -371,6 +371,7 @@ enum disp_pwm_id_t disp_pwm_get_main(void)
 	return g_pwm_main_id;
 }
 
+extern void sts_lcd_backlight_enable(bool on);
 
 #ifndef CONFIG_FPGA_EARLY_PORTING
 static void disp_pwm_set_drverIC_en(enum disp_pwm_id_t id, int enabled)
@@ -386,6 +387,10 @@ static void disp_pwm_set_drverIC_en(enum disp_pwm_id_t id, int enabled)
 			mt_set_gpio_out(GPIO_LCM_LED_EN, GPIO_OUT_ZERO);
 	}
 #endif
+	if (enabled)
+		sts_lcd_backlight_enable(true);
+	else
+		sts_lcd_backlight_enable(false);
 }
 
 static void disp_pwm_set_enabled(struct cmdqRecStruct *cmdq,

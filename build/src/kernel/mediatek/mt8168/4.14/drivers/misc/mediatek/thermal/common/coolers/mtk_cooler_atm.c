@@ -60,12 +60,6 @@
 #include <mt-plat/mtk_devinfo.h>
 #endif
 
-#ifdef CONFIG_AMAZON_METRICS_LOG
-#include <linux/metricslog.h>
-#define TSCPU_METRICS_STR_LEN 128
-#define PREFIX "thermaltscpu:def"
-#endif
-
 /*****************************************************************************
  *  Local switches
  *****************************************************************************/
@@ -135,20 +129,12 @@ static struct thermal_cooling_device
 	*cl_dev_adp_cpu[MAX_CPT_ADAPTIVE_COOLERS] = { NULL };
 static unsigned int cl_dev_adp_cpu_state[MAX_CPT_ADAPTIVE_COOLERS] = { 0 };
 #if defined(CLATM_SET_INIT_CFG)
-#if defined(CONFIG_CLATM_CHOOSE_HIGHER_TARGET_TJ)
-int TARGET_TJS[MAX_CPT_ADAPTIVE_COOLERS] = { 50000, 50000, 50000 };
-#else
 int TARGET_TJS[MAX_CPT_ADAPTIVE_COOLERS] = {
 			CLATM_INIT_CFG_0_TARGET_TJ,
 			CLATM_INIT_CFG_1_TARGET_TJ,
 			CLATM_INIT_CFG_2_TARGET_TJ };
-#endif
-#else
-#if defined(CONFIG_CLATM_CHOOSE_HIGHER_TARGET_TJ)
-int TARGET_TJS[MAX_CPT_ADAPTIVE_COOLERS] = { 55000, 0 };
 #else
 int TARGET_TJS[MAX_CPT_ADAPTIVE_COOLERS] = { 85000, 0 };
-#endif
 #endif
 
 static unsigned int cl_dev_adp_cpu_state_active;
@@ -1773,11 +1759,7 @@ static int decide_ttj(void)
 {
 	int i = 0;
 	int active_cooler_id = -1;
-#if defined(CONFIG_CLATM_CHOOSE_HIGHER_TARGET_TJ)
-	int ret = 50000;	/* lowest allowable TJ */
-#else
-	int ret = 117000;       /* highest allowable TJ */
-#endif
+	int ret = 117000;	/* highest allowable TJ */
 	int temp_cl_dev_adp_cpu_state_active = 0;
 #ifdef CONFIG_MTK_TINYSYS_SSPM_SUPPORT
 #if THERMAL_ENABLE_TINYSYS_SSPM && CPT_ADAPTIVE_AP_COOLER &&	\
@@ -1790,11 +1772,7 @@ static int decide_ttj(void)
 
 	for (; i < MAX_CPT_ADAPTIVE_COOLERS; i++) {
 		if (cl_dev_adp_cpu_state[i]) {
-#if defined(CONFIG_CLATM_CHOOSE_HIGHER_TARGET_TJ)
-			ret = MAX(ret, TARGET_TJS[i]);
-#else
 			ret = MIN(ret, TARGET_TJS[i]);
-#endif
 			temp_cl_dev_adp_cpu_state_active = 1;
 
 			if (ret == TARGET_TJS[i])
@@ -1805,11 +1783,7 @@ static int decide_ttj(void)
 	TARGET_TJ = ret;
 #if CONTINUOUS_TM
 	if (ctm_on) {
-#ifdef CONFIG_COOLER_ADAPTIVE_BTS
-		int curr_tpcb = mtk_thermal_get_temp(MTK_THERMAL_SENSOR_BTS0);
-#else
 		int curr_tpcb = mtk_thermal_get_temp(MTK_THERMAL_SENSOR_AP);
-#endif
 
 		if (ctm_on == 1) {
 			TARGET_TJ = MIN(MAX_TARGET_TJ,
@@ -1947,16 +1921,8 @@ static int adp_cpu_get_max_state
 static int adp_cpu_get_cur_state
 (struct thermal_cooling_device *cdev, unsigned long *state)
 {
-	int adp_cooler_id = cdev->type[strlen(cdev->type) - 1] - '0';
-
 	/* tscpu_dprintk("adp_cpu_get_cur_state\n"); */
-	if (adp_cooler_id >= MAX_CPT_ADAPTIVE_COOLERS
-		|| adp_cooler_id < 0) {
-		pr_err("%s: adaptive cooler index ERROR.\n", __func__);
-		return -EINVAL;
-	}
-
-	*state = cl_dev_adp_cpu_state[adp_cooler_id];
+	*state = cl_dev_adp_cpu_state[(cdev->type[13] - '0')];
 	/* *state = cl_dev_adp_cpu_state; */
 	return 0;
 }
@@ -1965,25 +1931,8 @@ static int adp_cpu_set_cur_state
 (struct thermal_cooling_device *cdev, unsigned long state)
 {
 	int ttj = 117000;
-	int adp_cooler_id = cdev->type[strlen(cdev->type) - 1] - '0';
-#ifdef CONFIG_AMAZON_METRICS_LOG
-	char buf[TSCPU_METRICS_STR_LEN];
 
-	if (adp_cooler_id >= MAX_CPT_ADAPTIVE_COOLERS
-		|| adp_cooler_id < 0) {
-		pr_err("%s: adaptive cooler index ERROR.\n", __func__);
-		return -EINVAL;
-	}
-
-	if (cl_dev_adp_cpu_state[adp_cooler_id] != state) {
-		snprintf(buf, TSCPU_METRICS_STR_LEN,
-			"%s:cpumonitor_%s_cooler_state=%ld;CT;1:NR",
-			PREFIX, cdev->type, state);
-		log_to_metrics(ANDROID_LOG_INFO, "ThermalEvent", buf);
-	}
-#endif
-
-	cl_dev_adp_cpu_state[adp_cooler_id] = state;
+	cl_dev_adp_cpu_state[(cdev->type[13] - '0')] = state;
 
 	/* TODO: no exit point can be obtained in mtk_ts_cpu.c */
 	ttj = decide_ttj();
@@ -2000,7 +1949,7 @@ static int adp_cpu_set_cur_state
 #endif
 
 #ifndef FAST_RESPONSE_ATM
-	if (active_adp_cooler == adp_cooler_id) {
+	if (active_adp_cooler == (int)(cdev->type[13] - '0')) {
 		/* = (NULL == mtk_thermal_get_gpu_loading_fp) ?
 		 *			0 : mtk_thermal_get_gpu_loading_fp();
 		 */

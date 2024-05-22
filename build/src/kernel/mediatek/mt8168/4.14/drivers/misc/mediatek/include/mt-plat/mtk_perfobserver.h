@@ -152,6 +152,8 @@ extern int pob_qos_unregister_client(struct notifier_block *nb);
 
 extern int pob_qos_monitor_update(enum pob_qos_info_num info_num,
 					void *info);
+
+extern void pob_qos_tracker(u64 wallclock);
 #else
 static inline int pob_qos_register_client(struct notifier_block *nb)
 { return 0; }
@@ -160,6 +162,9 @@ static inline int pob_qos_unregister_client(struct notifier_block *nb)
 static inline int pob_qos_monitor_update(enum pob_qos_info_num info_num,
 						void *info)
 { return 0; }
+
+static inline void pob_qos_tracker(u64 wallclock)
+{ return; }
 #endif
 
 

@@ -54,6 +54,4 @@ extern int tcpc_typec_handle_pe_pr_swap(struct tcpc_device *tcpc_dev);
 extern int tcpc_typec_swap_role(struct tcpc_device *tcpc_dev);
 #endif /* CONFIG_TYPEC_CAP_ROLE_SWAP */
 
-extern bool tcpc_typec_is_unattached(struct tcpc_device *tcpc_dev);
-
 #endif /* #ifndef __LINUX_TCPCI_TYPEC_H */

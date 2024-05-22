@@ -25,7 +25,6 @@
  * @wq_hd: wait queue used for vcu cmd trigger then wait vcu interrupt done
  * @signaled: flag used for checking vcu interrupt done
  * @failure: flag to show vcu cmd succeeds or not
- * @state: enum venc_ipi_msg_enc_state
  * @bs_size: bitstream size for skip frame case usage
  * @is_key_frm: key frame flag
  * @inst_addr: VCU instance addr

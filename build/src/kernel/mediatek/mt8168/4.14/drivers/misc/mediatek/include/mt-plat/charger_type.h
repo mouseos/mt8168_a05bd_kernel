@@ -23,9 +23,7 @@ enum charger_type {
 	APPLE_2_1A_CHARGER, /* 2.1A apple charger */
 	APPLE_1_0A_CHARGER, /* 1A apple charger */
 	APPLE_0_5A_CHARGER, /* 0.5A apple charger */
-	WIRELESS_5W_CHARGER, /* 5W power wireless charger */
-	WIRELESS_10W_CHARGER, /* 10W power wireless charger */
-	WIRELESS_DEFAULT_CHARGER, /* default 0.5A wireless charger */
+	WIRELESS_CHARGER,
 };
 
 #if defined(CONFIG_USB_MTK_HDRC) || defined(CONFIG_USB_MU3D_DRV) \

@@ -57,7 +57,6 @@
 #define ALSPS_STATUS_MAX (64)
 #define ALSPS_DIV_MAX (32767)
 #define ALSPS_DIV_MIN (1)
-#define ALS_DELAY_MIN_MS 10
 
 #define MAX_CHOOSE_ALSPS_NUM 5
 
@@ -143,7 +142,6 @@ struct alsps_context {
 	atomic_t delay_als; /*als polling period for reporting input event*/
 	atomic_t delay_ps;  /*ps polling period for reporting input event*/
 	atomic_t wake;      /*user-space request to wake-up, used with stop*/
-	atomic_t alsps_pause;
 
 	atomic_t early_suspend;
 
@@ -162,9 +160,7 @@ struct alsps_context {
 	bool is_als_first_data_after_enable;
 	bool is_ps_first_data_after_enable;
 	bool is_als_polling_run;
-	bool is_als_need_restore_polling;
 	bool is_ps_polling_run;
-	bool is_ps_need_restore_polling;
 	/* v2.judging whether sensor is in batch mode */
 	bool is_als_batch_enable;
 	bool is_ps_batch_enable;
@@ -191,8 +187,6 @@ extern int alsps_aal_get_data(void);
 
 /* for auto detect */
 extern int alsps_driver_add(struct alsps_init_info *obj);
-extern int alsps_driver_pause_polling(int en);
-extern int alsps_driver_query_polling_state(int sensorType);
 extern int ps_report_interrupt_data(int value);
 extern int ps_flush_report(void);
 extern int als_data_report(int value, int status);

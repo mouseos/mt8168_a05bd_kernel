@@ -391,7 +391,7 @@ static void mtkfb_ion_free_handle(struct ion_client *client,
 static size_t mtkfb_ion_phys_mmu_addr(struct ion_client *client,
 	struct ion_handle *handle, unsigned int *mva)
 {
-	size_t size = 0;
+	size_t size;
 	ion_phys_addr_t phy_addr = 0;
 
 	if (!ion_client) {
@@ -711,7 +711,7 @@ unsigned int mtkfb_query_buf_info(unsigned int session_id,
 bool mtkfb_update_buf_info(unsigned int session_id, unsigned int layer_id,
 	unsigned int idx, unsigned int mva_offset, unsigned int seq
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
-	, unsigned int secure_handle, unsigned int isSecure, __u8 *layer_enable
+	, unsigned int secure_handle, unsigned int isSecure
 #endif
 )
 {
@@ -745,14 +745,11 @@ bool mtkfb_update_buf_info(unsigned int session_id, unsigned int layer_id,
 				res = KREE_ReferenceSecurechunkmem
 					(secure_memory_session_handle(),
 					secure_handle);
-				if (res != TZ_RESULT_SUCCESS) {
+				if (res != TZ_RESULT_SUCCESS)
 					DISPERR(
 						"KREE_ReferenceSecurechunkmem failed (%s), sec_handle 0x%x\n",
 						TZ_GetErrorString(res),
 						secure_handle);
-					if (layer_enable != NULL)
-						*layer_enable = 0;
-				}
 			}
 #endif
 		break;

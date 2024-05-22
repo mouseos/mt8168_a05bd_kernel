@@ -235,10 +235,14 @@ void hdmi_factory_dpi_parameters(int arg, int io_driving)
 	hdmi_factory_dpi_params.dispif_config.dpi.bg_height =
 	    DPI_Params_Context.bg_height;
 
-	hdmi_factory_dpi_params.dispif_config.dpi.clk_pol = clk_pol;
-	hdmi_factory_dpi_params.dispif_config.dpi.de_pol = de_pol;
-	hdmi_factory_dpi_params.dispif_config.dpi.vsync_pol = vsync_pol;
-	hdmi_factory_dpi_params.dispif_config.dpi.hsync_pol = hsync_pol;
+	hdmi_factory_dpi_params.dispif_config.dpi.clk_pol =
+	    (enum LCM_POLARITY)clk_pol;
+	hdmi_factory_dpi_params.dispif_config.dpi.de_pol =
+	    (enum LCM_POLARITY)de_pol;
+	hdmi_factory_dpi_params.dispif_config.dpi.vsync_pol =
+	    (enum LCM_POLARITY)vsync_pol;
+	hdmi_factory_dpi_params.dispif_config.dpi.hsync_pol =
+	    (enum LCM_POLARITY)hsync_pol;
 
 	hdmi_factory_dpi_params.dispif_config.dpi.hsync_pulse_width =
 	    hsync_pulse_width;

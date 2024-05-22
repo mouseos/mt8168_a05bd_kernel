@@ -456,7 +456,6 @@ struct layer_config {
 	int ext_sel_layer;
 	unsigned int src_width, src_height;
 	unsigned int layer_caps;
-	int secure_layer;
 };
 
 struct disp_layer_info {

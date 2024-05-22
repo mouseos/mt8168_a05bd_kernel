@@ -19,13 +19,7 @@ subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/pmic/include
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/power/supply/mediatek/misc
-subdir-ccflags-y += -Werror -I$(srctree)/drivers/power/supply/mediatek/charger
-subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
-subdir-ccflags-y += -Werror -I$(srctree)/drivers/power/supply/mediatek/pubadc_manage
 
 ifeq ($(CONFIG_MTK_GAUGE_VERSION),30)
 	obj-y += mtk_battery.o mtk_power_misc.o mtk_gauge_coulomb_service.o mtk_gauge_class.o mtk_battery_recovery.o mtk_battery_core.o
-ifeq ($(or $(strip $(CONFIG_AMZN_METRICS_LOG)), $(strip $(CONFIG_AMAZON_MINERVA_METRICS_LOG))),y)
-	obj-y += battery_metrics.o
-endif
 endif

@@ -455,9 +455,7 @@ struct cmdqSecDataStruct {
 	uint32_t addrMetadataMaxCount;	/*[Reserved] */
 
 	uint64_t enginesNeedDAPC;
-	uint64_t enginesDisableDAPC;
 	uint64_t enginesNeedPortSecurity;
-	uint64_t enginesDisablePortSecurity;
 
 	/* [Reserved] This is for CMDQ driver usage itself. Not for client.
 	 * task index in thread's tasklist. -1 for not in tasklist.

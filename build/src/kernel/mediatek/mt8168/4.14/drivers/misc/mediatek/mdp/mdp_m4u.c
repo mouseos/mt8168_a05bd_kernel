@@ -87,7 +87,7 @@ struct ion_handle *mdp_ion_import_handle(int fd)
 		return NULL;
 	}
 
-	CMDQ_MSG("import ion handle fd=%d,hnd=0x%p\n", fd, handle);
+	CMDQ_LOG("import ion handle fd=%d,hnd=0x%p\n", fd, handle);
 #endif
 	return handle;
 }
@@ -104,7 +104,7 @@ void mdp_ion_free_handle(struct ion_handle *handle)
 
 	ion_free(g_mdp_ion_client, handle);
 
-	CMDQ_MSG("free ion handle 0x%p\n", handle);
+	CMDQ_LOG("free ion handle 0x%p\n", handle);
 #endif
 }
 
@@ -127,7 +127,7 @@ void mdp_ion_cache_flush(struct ion_handle *handle)
 
 	if (ion_kernel_ioctl(g_mdp_ion_client, ION_CMD_SYSTEM,
 		(unsigned long)&sys_data))
-		CMDQ_ERR("ion cache flush failed!\n");
+		pr_info("ion cache flush failed!\n");
 	ion_unmap_kernel(g_mdp_ion_client, handle);
 #endif
 }

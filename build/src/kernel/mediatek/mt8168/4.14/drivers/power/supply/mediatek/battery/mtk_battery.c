@@ -60,7 +60,6 @@
 #include <mt-plat/mtk_charger.h>
 #include <mt-plat/mtk_battery.h>
 #include <mt-plat/mtk_boot.h>
-#include <mt-plat/battery_metrics.h>
 
 #include <mtk_gauge_class.h>
 #include "mtk_battery_internal.h"
@@ -69,7 +68,6 @@
 #include <mt-plat/upmu_common.h>
 #include <pmic_lbat_service.h>
 
-#include <mtk_charger_intf.h>
 
 
 /* ============================================================ */
@@ -125,11 +123,6 @@ static enum power_supply_property battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
-	POWER_SUPPLY_PROP_THERMAL_INPUT_CURRENT_LIMIT,
-	POWER_SUPPLY_PROP_THERMAL_INPUT_POWER_LIMIT,
-	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 };
 
 /* weak function */
@@ -343,76 +336,6 @@ void battery_update_psd(struct battery_data *bat_data)
 	bat_data->BAT_batt_temp = battery_get_bat_temperature();
 }
 
-static int battery_property_is_writeable(struct power_supply *psy,
-		enum power_supply_property psp)
-{
-	switch (psp) {
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-	case POWER_SUPPLY_PROP_THERMAL_INPUT_CURRENT_LIMIT:
-	case POWER_SUPPLY_PROP_THERMAL_INPUT_POWER_LIMIT:
-	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-static int battery_set_property(struct power_supply *psy,
-	enum power_supply_property psp, const union power_supply_propval *val)
-{
-	struct charger_consumer *charger_consumer = gm.pbat_consumer;
-	struct charger_manager *cm;
-
-	if ((!IS_ERR_OR_NULL(charger_consumer)) &&
-		(!IS_ERR_OR_NULL(charger_consumer->cm))) {
-		cm = charger_consumer->cm;
-	} else {
-		dev_err(&(psy->dev), "charger manager is not initialized\n");
-		return -EINVAL;
-	}
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		cm->chg1_data.force_input_current_limit = val->intval;
-		break;
-	case POWER_SUPPLY_PROP_THERMAL_INPUT_CURRENT_LIMIT:
-		if (cm->thermal_throttling_by_psy) {
-			cm->chg1_data.thermal_input_current_limit = val->intval;
-		} else {
-			dev_err(&(psy->dev), "thermal_throttling_by_psy is not enable\n");
-			return -EINVAL;
-		}
-		break;
-	case POWER_SUPPLY_PROP_THERMAL_INPUT_POWER_LIMIT:
-		cm->chg1_data.thermal_input_power_limit = val->intval;
-		if (val->intval == 0)
-			wireless_charger_dev_set_sleep_en(
-				get_charger_by_name("wireless_chg"), true);
-		else
-			wireless_charger_dev_set_sleep_en(
-				get_charger_by_name("wireless_chg"), false);
-		break;
-	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		cm->chg1_data.force_charging_current = val->intval;
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		charger_manager_set_charging_current_limit(charger_consumer,
-			MAIN_CHARGER, val->intval);
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	if (IS_ERR_OR_NULL(cm->change_current_setting))
-		return -EINVAL;
-
-	cm->change_current_setting(cm);
-	_wake_up_charger(cm);
-
-	return 0;
-}
-
 static int battery_get_property(struct power_supply *psy,
 	enum power_supply_property psp,
 	union power_supply_propval *val)
@@ -423,14 +346,6 @@ static int battery_get_property(struct power_supply *psy,
 
 	struct battery_data *data =
 		container_of(psy->desc, struct battery_data, psd);
-
-	struct charger_consumer *charger_consumer = gm.pbat_consumer;
-	struct charger_manager *cm = NULL;
-
-	if ((!IS_ERR_OR_NULL(charger_consumer)) &&
-		(!IS_ERR_OR_NULL(charger_consumer->cm))) {
-		cm = charger_consumer->cm;
-	}
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -475,50 +390,10 @@ static int battery_get_property(struct power_supply *psy,
 			* 1000 / 100;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = battery_get_bat_voltage() * 1000;
+		val->intval = data->BAT_batt_vol * 1000;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = data->BAT_batt_temp * 10;
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		if (IS_ERR_OR_NULL(cm)) {
-			val->intval = 0;
-			ret = -EINVAL;
-		} else {
-			val->intval = cm->chg1_data.force_input_current_limit;
-		}
-		break;
-	case POWER_SUPPLY_PROP_THERMAL_INPUT_CURRENT_LIMIT:
-		if (IS_ERR_OR_NULL(cm)) {
-			val->intval = 0;
-			ret = -EINVAL;
-		} else {
-			val->intval = cm->chg1_data.thermal_input_current_limit;
-		}
-		break;
-	case POWER_SUPPLY_PROP_THERMAL_INPUT_POWER_LIMIT:
-		if (IS_ERR_OR_NULL(cm)) {
-			val->intval = 0;
-			ret = -EINVAL;
-		} else {
-			val->intval = cm->chg1_data.thermal_input_power_limit;
-		}
-		break;
-	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		if (IS_ERR_OR_NULL(cm)) {
-			val->intval = 0;
-			ret = -EINVAL;
-		} else {
-			val->intval = cm->chg1_data.force_charging_current;
-		}
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		if (IS_ERR_OR_NULL(cm)) {
-			val->intval = 0;
-			ret = -EINVAL;
-		} else {
-			val->intval = cm->chg1_data.thermal_charging_current_limit;
-		}
 		break;
 
 	default:
@@ -537,8 +412,6 @@ struct battery_data battery_main = {
 		.properties = battery_props,
 		.num_properties = ARRAY_SIZE(battery_props),
 		.get_property = battery_get_property,
-		.set_property = battery_set_property,
-		.property_is_writeable = battery_property_is_writeable,
 		},
 
 	.BAT_STATUS = POWER_SUPPLY_STATUS_DISCHARGING,
@@ -577,7 +450,6 @@ void battery_update(struct battery_data *bat_data)
 	if (is_fg_disabled())
 		bat_data->BAT_CAPACITY = 50;
 
-	bat_metrics_chg_state(bat_data->BAT_STATUS);
 	power_supply_changed(bat_psy);
 }
 
@@ -832,9 +704,6 @@ static int proc_dump_log_show(struct seq_file *m, void *v)
 	seq_puts(m, "103: send CHR FULL\n");
 	seq_puts(m, "104: disable NAFG interrupt\n");
 	seq_puts(m, "105: show daemon pid\n");
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	seq_puts(m, "201: show current ZCV status\n");
-#endif
 
 	seq_printf(m, "current command:%d\n", gm.proc_cmd_id);
 
@@ -846,7 +715,6 @@ static int proc_dump_log_show(struct seq_file *m, void *v)
 	case 2:
 	case 3:
 	case 4:
-	case 201:
 		wakeup_fg_algo_cmd(
 			FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_DUMP_LOG,
 			gm.proc_cmd_id);
@@ -1371,6 +1239,7 @@ int force_get_tbat_internal(bool update)
 					pre_fg_r_value,
 					pre_bat_temperature_val2);
 				/*pmic_auxadc_debug(1);*/
+				WARN_ON(1);
 			}
 
 			pre_bat_temperature_volt_temp =
@@ -1450,11 +1319,8 @@ int force_get_tbat(bool update)
 			__func__,
 			bat_temperature_val,
 			DEFAULT_BATTERY_TMP_WHEN_DISABLE_NAFG);
-#ifdef CHECK_IS_BATTERY_EXIST
+
 		return DEFAULT_BATTERY_TMP_WHEN_DISABLE_NAFG;
-#else
-		return bat_temperature_val;
-#endif
 	}
 
 	gm.ntc_disable_nafg = false;
@@ -1464,7 +1330,7 @@ int force_get_tbat(bool update)
 
 unsigned int battery_meter_get_fg_time(void)
 {
-	unsigned int time = 0;
+	unsigned int time;
 
 	gauge_dev_get_time(gm.gdev, &time);
 	return time;
@@ -1495,14 +1361,9 @@ static void nl_send_to_user(u32 pid, int seq, struct fgd_nl_msg_t *reply_msg)
 
 	reply_msg->identity = FGD_NL_MAGIC;
 
-	if (in_interrupt())
-		skb = alloc_skb(len, GFP_ATOMIC);
-	else
-		skb = alloc_skb(len, GFP_KERNEL);
-	if (!skb) {
-		bm_err("Error: nl_send_to_user() alloc_skb() fail!!!\n");
+	skb = alloc_skb(len, GFP_ATOMIC);
+	if (!skb)
 		return;
-	}
 
 	nlh = nlmsg_put(skb, pid, seq, 0, size, 0);
 	data = NLMSG_DATA(nlh);
@@ -1556,12 +1417,6 @@ static void nl_data_handler(struct sk_buff *skb)
 	}
 
 	size = fgd_msg->fgd_ret_data_len + FGD_NL_MSG_T_HDR_LEN;
-
-	/* protection from malicious process */
-	if (fgd_msg->fgd_ret_data_len > FGD_NL_MSG_MAX_LEN) {
-		bm_err("illegal fgd_ret_data_len data length, ignore it.");
-		return;
-	}
 
 	fgd_ret_msg = vmalloc(size);
 	if (!fgd_ret_msg)
@@ -1679,12 +1534,9 @@ int wakeup_fg_algo_atomic(unsigned int flow_state)
 		struct fgd_nl_msg_t *fgd_msg;
 		int size = FGD_NL_MSG_T_HDR_LEN + sizeof(flow_state);
 
-		if (in_interrupt())
-			fgd_msg = kmalloc(size, GFP_ATOMIC);
-		else
-			fgd_msg = kmalloc(size, GFP_KERNEL);
+		fgd_msg = kmalloc(size, GFP_ATOMIC);
 		if (!fgd_msg) {
-			bm_err("Error: wakeup_fg_algo() kmalloc fail!!!\n");
+/* bm_err("Error: wakeup_fg_algo() vmalloc fail!!!\n"); */
 			return -1;
 		}
 
@@ -1729,12 +1581,6 @@ void fg_ocv_query_soc(int ocv)
 
 	bm_trace("[%s] ocv:%d\n",
 		__func__, ocv);
-}
-
-void fg_update_difference_full_cv(unsigned long val)
-{
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_SET_FULL_CV, val);
 }
 
 void exec_BAT_EC(int cmd, int param)
@@ -3027,252 +2873,6 @@ static DEVICE_ATTR(
 	reset_battery_cycle, 0664,
 	show_reset_battery_cycle, store_reset_battery_cycle);
 
-static ssize_t vendor_name_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{	int i;
-
-	for (i = 0; i < ARRAY_SIZE(gm.dts_idme_battery_id); i++) {
-		if (gm.idme_battery_id == gm.dts_idme_battery_id[i] &&
-			gm.dts_idme_battery_names[i])
-			return scnprintf(buf, PAGE_SIZE, "%s\n",
-							gm.dts_idme_battery_names[i]);
-	}
-
-	return scnprintf(buf, PAGE_SIZE, "Unknown\n");
-}
-static DEVICE_ATTR_RO(vendor_name);
-
-static ssize_t cell_vendor_name_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	if (gm.battery_id < gm.total_battery_number)
-		if (gm.bat_name[gm.battery_id])
-			return scnprintf(buf, PAGE_SIZE, "%s\n",
-						gm.bat_name[gm.battery_id]);
-		else
-			return scnprintf(buf, PAGE_SIZE, "Unknown\n");
-	else
-		return scnprintf(buf, PAGE_SIZE, "Invalid\n");
-}
-static DEVICE_ATTR_RO(cell_vendor_name);
-
-static ssize_t gm30_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_soc);
-}
-static DEVICE_ATTR_RO(gm30_soc);
-
-static ssize_t gm30_fg_c_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_fg_c_soc);
-}
-static DEVICE_ATTR_RO(gm30_fg_c_soc);
-
-static ssize_t gm30_fg_v_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_fg_v_soc);
-}
-static DEVICE_ATTR_RO(gm30_fg_v_soc);
-
-static ssize_t gm30_ui_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_ui_soc);
-}
-static DEVICE_ATTR_RO(gm30_ui_soc);
-
-static ssize_t gm30_vc_diff_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_vc_diff);
-}
-static DEVICE_ATTR_RO(gm30_vc_diff);
-
-static ssize_t gm30_vc_mode_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_vc_mode);
-}
-static DEVICE_ATTR_RO(gm30_vc_mode);
-
-static ssize_t gm30_init_vbat_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_init_vbat);
-}
-static DEVICE_ATTR_RO(gm30_init_vbat);
-
-static ssize_t gm30_t_d0_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_t_d0);
-}
-static DEVICE_ATTR_RO(gm30_t_d0);
-
-static ssize_t gm30_T_table_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_T_table);
-}
-static DEVICE_ATTR_RO(gm30_T_table);
-
-static ssize_t gm30_T_table_c_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_T_table_c);
-}
-static DEVICE_ATTR_RO(gm30_T_table_c);
-
-static ssize_t gm30_fg_c_d0_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_fg_c_d0_soc);
-}
-static DEVICE_ATTR_RO(gm30_fg_c_d0_soc);
-
-static ssize_t gm30_fg_v_d0_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_fg_v_d0_soc);
-}
-static DEVICE_ATTR_RO(gm30_fg_v_d0_soc);
-
-static ssize_t gm30_quse_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_quse);
-}
-static DEVICE_ATTR_RO(gm30_quse);
-
-static ssize_t gm30_quse_wo_lf_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_quse_wo_lf);
-}
-static DEVICE_ATTR_RO(gm30_quse_wo_lf);
-
-static ssize_t gm30_quse_tb1_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_quse_tb1);
-}
-static DEVICE_ATTR_RO(gm30_quse_tb1);
-
-static ssize_t gm30_quse_wo_lf_tb1_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_quse_wo_lf_tb1);
-}
-static DEVICE_ATTR_RO(gm30_quse_wo_lf_tb1);
-
-static ssize_t gm30_aging_factor_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_aging_factor);
-}
-static DEVICE_ATTR_RO(gm30_aging_factor);
-
-static ssize_t gm30_bat_cycle_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_bat_cycle);
-}
-static DEVICE_ATTR_RO(gm30_bat_cycle);
-
-static ssize_t gm30_cv_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_cv_soc);
-}
-static DEVICE_ATTR_RO(gm30_cv_soc);
-
-static ssize_t gm30_car_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_car);
-}
-static DEVICE_ATTR_RO(gm30_car);
-
-static ssize_t gm30_car_v_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_car_v);
-}
-static DEVICE_ATTR_RO(gm30_car_v);
-
-static ssize_t gm30_qmax_t_0ma_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_qmax_t_0ma);
-}
-static DEVICE_ATTR_RO(gm30_qmax_t_0ma);
-
-static ssize_t gm30_qmax_t_0ma_tb1_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_qmax_t_0ma_tb1);
-}
-static DEVICE_ATTR_RO(gm30_qmax_t_0ma_tb1);
-
-static ssize_t gm30_init_path_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_init_path);
-}
-static DEVICE_ATTR_RO(gm30_init_path);
-
-static ssize_t gm30_vboot_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_vboot);
-}
-static DEVICE_ATTR_RO(gm30_vboot);
-
-static ssize_t gm30_vboot_c_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", fg_log_data.gm30_vboot_c);
-}
-static DEVICE_ATTR_RO(gm30_vboot_c);
-
-static ssize_t con0_soc_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int _soc = 0;
-
-	gauge_dev_get_info(gm.gdev, GAUGE_CON0_SOC, &_soc);
-	return scnprintf(buf, PAGE_SIZE, "%d\n", _soc);
-}
-static DEVICE_ATTR_RO(con0_soc);
-
-static ssize_t hw_ocv_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", gm.hw_status.hw_ocv);
-}
-static DEVICE_ATTR_RO(hw_ocv);
-
-static ssize_t sw_ocv_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%d\n", gm.hw_status.sw_ocv);
-}
-static DEVICE_ATTR_RO(sw_ocv);
-
-static ssize_t rtc_ui_soc_show(struct device *dev,
-		 struct device_attribute *attr, char *buf)
-{
-	int rtc_ui_soc = 0;
-
-	gauge_dev_get_rtc_ui_soc(gm.gdev, &rtc_ui_soc);
-	return scnprintf(buf, PAGE_SIZE, "%d\n", rtc_ui_soc);
-}
-static DEVICE_ATTR_RO(rtc_ui_soc);
-/* End of GM3.0 debugging node */
-
 static ssize_t show_BAT_EC(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -3354,121 +2954,6 @@ static DEVICE_ATTR(
 	FG_Battery_CurrentConsumption, 0664, show_FG_Battery_CurrentConsumption,
 		   store_FG_Battery_CurrentConsumption);
 
-static ssize_t show_fake_rtc_soc(
-	struct device *dev, struct device_attribute *attr,
-	char *buf)
-{
-	return sprintf(buf, "%d\n", gm.fake_rtc_soc);
-}
-static ssize_t store_fake_rtc_soc(
-	struct device *dev, struct device_attribute *attr,
-	const char *buf, size_t size)
-{
-	int cur, ret;
-
-	ret = kstrtos32(buf, 0, &cur);
-
-	if (!ret && (cur > 0 && cur < 100)) {
-		gm.fake_rtc_soc = cur;
-		gauge_dev_set_rtc_ui_soc(gm.gdev, gm.fake_rtc_soc);
-		pr_notice("custom rtc soc = %d\n", gm.fake_rtc_soc);
-	} else {
-		gm.fake_rtc_soc = -1;
-	}
-	return size;
-}
-static DEVICE_ATTR(fake_rtc_soc, 0664,
-	show_fake_rtc_soc, store_fake_rtc_soc);
-
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-static ssize_t use_aging_zcv_show(
-	struct device *dev, struct device_attribute *attr,
-	char *buf)
-{
-	return sprintf(buf, "%d\n", gm.use_aging_zcv);
-}
-static ssize_t use_aging_zcv_store(
-	struct device *dev, struct device_attribute *attr,
-	const char *buf, size_t size)
-{
-	unsigned long val = 0;
-	int ret;
-
-	bm_err("[%s]\n", __func__);
-
-	if (buf != NULL && size != 0) {
-		bm_err("[%s] buf is %s\n",
-			__func__, buf);
-		ret = kstrtoul(buf, 10, &val);
-		if (ret < 0) {
-			bm_err("[%s] err, ret is %d\n",
-				__func__, ret);
-			return ret;
-		}
-
-		if ((val < 3) && ((int)val > gm.use_aging_zcv))
-			wakeup_fg_algo_cmd(
-				FG_INTR_KERNEL_CMD,
-				FG_KERNEL_CMD_USE_AGING_ZCV,
-				val);
-		else
-			return size;
-
-		bm_err("[%s] Use aging zcv = %d\n",
-			__func__, (int)val);
-	}
-
-	return size;
-}
-
-static ssize_t disable_aging_zcv_show(
-	struct device *dev, struct device_attribute *attr,
-	char *buf)
-{
-	return sprintf(buf, "%d\n", gm.use_aging_zcv);
-}
-static ssize_t disable_aging_zcv_store(
-	struct device *dev, struct device_attribute *attr,
-	const char *buf, size_t size)
-{
-	unsigned long val = 0;
-	int ret;
-
-	bm_err("[%s]\n", __func__);
-
-	if (buf != NULL && size != 0) {
-		bm_err("[%s] buf is %s\n",
-			__func__, buf);
-		ret = kstrtoul(buf, 10, &val);
-		if (ret < 0) {
-			bm_err("[%s] err, ret is %d ??\n",
-				__func__, ret);
-			return ret;
-		}
-
-		if (val != 0) {
-			val = 0;
-			wakeup_fg_algo_cmd(
-				FG_INTR_KERNEL_CMD,
-				FG_KERNEL_CMD_USE_AGING_ZCV,
-				val);
-		} else {
-			return size;
-		}
-
-		bm_err("[%s] Use aging zcv = %d\n",
-			__func__, (int)val);
-	}
-
-	return size;
-}
-
-static DEVICE_ATTR(use_aging_zcv, 0664,
-	use_aging_zcv_show, use_aging_zcv_store);
-static DEVICE_ATTR(disable_aging_zcv, 0664,
-	disable_aging_zcv_show, disable_aging_zcv_store);
-#endif
-
 /* /////////////////////////////////////*/
 /* // Create File For EM : Power_On_Voltage */
 /* /////////////////////////////////////*/
@@ -3529,10 +3014,6 @@ static int battery_callback(
 		{
 /* CHARGING FULL */
 			notify_fg_chr_full();
-			if (battery_main.BAT_CAPACITY == 100) {
-				battery_main.BAT_STATUS = POWER_SUPPLY_STATUS_FULL;
-				battery_update(&battery_main);
-			}
 		}
 		break;
 	case CHARGER_NOTIFY_START_CHARGING:
@@ -3920,46 +3401,6 @@ static const struct file_operations adc_cali_fops = {
 	.release = adc_cali_release,
 };
 
-static int battery_setup_gm30_node(struct platform_device *dev)
-{
-	/* runtime data */
-	device_create_file(&(dev->dev), &dev_attr_rtc_ui_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_ui_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_soc);
-	device_create_file(&(dev->dev), &dev_attr_con0_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_fg_c_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_fg_v_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_vc_diff);
-	device_create_file(&(dev->dev), &dev_attr_gm30_vc_mode);
-	device_create_file(&(dev->dev), &dev_attr_gm30_car);
-	device_create_file(&(dev->dev), &dev_attr_gm30_car_v);
-	device_create_file(&(dev->dev), &dev_attr_gm30_aging_factor);
-	device_create_file(&(dev->dev), &dev_attr_gm30_bat_cycle);
-
-	/* initial data */
-	device_create_file(&(dev->dev), &dev_attr_hw_ocv);
-	device_create_file(&(dev->dev), &dev_attr_sw_ocv);
-	device_create_file(&(dev->dev), &dev_attr_gm30_init_path);
-	device_create_file(&(dev->dev), &dev_attr_gm30_init_vbat);
-	device_create_file(&(dev->dev), &dev_attr_gm30_fg_c_d0_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_fg_v_d0_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_qmax_t_0ma);
-	device_create_file(&(dev->dev), &dev_attr_gm30_qmax_t_0ma_tb1);
-
-	/* keep them in case it's useful in future */
-	device_create_file(&(dev->dev), &dev_attr_gm30_t_d0);
-	device_create_file(&(dev->dev), &dev_attr_gm30_cv_soc);
-	device_create_file(&(dev->dev), &dev_attr_gm30_vboot);
-	device_create_file(&(dev->dev), &dev_attr_gm30_vboot_c);
-	device_create_file(&(dev->dev), &dev_attr_gm30_quse);
-	device_create_file(&(dev->dev), &dev_attr_gm30_quse_wo_lf);
-	device_create_file(&(dev->dev), &dev_attr_gm30_quse_tb1);
-	device_create_file(&(dev->dev), &dev_attr_gm30_quse_wo_lf_tb1);
-	device_create_file(&(dev->dev), &dev_attr_gm30_T_table);
-	device_create_file(&(dev->dev), &dev_attr_gm30_T_table_c);
-
-	return 0;
-}
 
 /*************************************/
 static struct wakeup_source battery_lock;
@@ -3981,15 +3422,6 @@ static int __init battery_probe(struct platform_device *dev)
 	char boot_voltage_tmp[10];
 	int boot_voltage_len = 0;
 
-#ifdef CONFIG_MTK_GET_BATTERY_ID_AUXADC
-	if (fguage_get_auxadc_channel(dev) < 0)
-		return -EPROBE_DEFER;
-
-	if (!fg_custom_bat_id_from_dts(dev)) {
-		bm_err("%s: fg_custom_bat_id_from_dts Fail !!\n",__func__);
-		return false;
-	}
-#endif
 	wakeup_source_init(&battery_lock, "battery wakelock");
 	__pm_stay_awake(&battery_lock);
 
@@ -4053,22 +3485,6 @@ static int __init battery_probe(struct platform_device *dev)
 		&dev_attr_shutdown_condition_enable);
 	ret_device_file = device_create_file(&(dev->dev),
 		&dev_attr_reset_battery_cycle);
-	ret_device_file = device_create_file(&(dev->dev),
-		&dev_attr_vendor_name);
-	ret_device_file = device_create_file(&(dev->dev),
-		&dev_attr_cell_vendor_name);
-	ret_device_file = device_create_file(&(dev->dev),
-		&dev_attr_fake_rtc_soc);
-
-#ifdef CONFIG_MTK_USE_AGING_ZCV
-	ret_device_file = device_create_file(&(dev->dev),
-		&dev_attr_use_aging_zcv);
-	ret_device_file = device_create_file(&(dev->dev),
-		&dev_attr_disable_aging_zcv);
-#endif
-
-	/* For GM3.0 debugging */
-	battery_setup_gm30_node(dev);
 
 	if (of_scan_flat_dt(fb_early_init_dt_get_chosen, NULL) > 0)
 		fg_swocv_v =
@@ -4162,9 +3578,6 @@ static int __init battery_probe(struct platform_device *dev)
 
 	gm.is_probe_done = true;
 
-	/* Charger & Battery mertrics */
-	bat_metrics_init();
-
 	return 0;
 }
 
@@ -4172,10 +3585,7 @@ void battery_shutdown(struct platform_device *dev)
 {
 	int fg_coulomb = 0;
 	int shut_car_diff = 0;
-	int verify_car = 0;
-
-	/* Charger & Battery mertrics */
-	bat_metrics_uninit();
+	int verify_car;
 
 	fg_coulomb = gauge_get_coulomb();
 	if (gm.d_saved_car != 0) {
@@ -4206,9 +3616,6 @@ static int battery_suspend(struct platform_device *dev, pm_message_t state)
 		if (gm.hw_status.iavg_lt > 0)
 			pmic_enable_interrupt(FG_IAVG_L_NO, 0, "GM30");
 	}
-
-	bat_metrics_suspend();
-
 	return 0;
 }
 
@@ -4231,7 +3638,6 @@ static int battery_resume(struct platform_device *dev)
 	/* reset nafg monitor time to avoid suspend for too long case */
 	get_monotonic_boottime(&gm.last_nafg_update_time);
 
-	bat_metrics_resume();
 	fg_update_sw_iavg();
 	return 0;
 }

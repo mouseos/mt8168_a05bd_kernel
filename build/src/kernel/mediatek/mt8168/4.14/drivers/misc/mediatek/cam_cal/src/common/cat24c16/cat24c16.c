@@ -59,9 +59,6 @@ static DEFINE_SPINLOCK(g_CAM_CALLock);/*for SMP*/
 
 #define CAM_CAL_DEV_MAJOR_NUMBER 226
 
-#define CAM_CAL_MAX_BUF_SIZE 65536/*For Safety, Can Be Adjusted*/
-
-
 /* CAM_CAL READ/WRITE ID */
 #define CATC24C16_DEVICE_ID				0xA0
 /*#define I2C_UNIT_SIZE                                  1 //in byte*/
@@ -198,12 +195,6 @@ static int selective_read_region(u32 addr, u8 *data, u16 i2c_id, u32 size)
 	u32 size_to_read = size;
 	/* kdSetI2CSpeed(EEPROM_I2C_SPEED); */
 	int ret = 0;
-
-	if ((addr >= 0x2000) || (size >= 0x2000) || (addr + size >= 0x2000)) {
-		CAM_CALDB(
-		"[CAT24C16] Read Error!! CAT24C16 not supprt address >= 0x2000!!, addr:%u, size:%u\n", addr, size);
-		return -1;
-	}
 
 	while (size_to_read > 0) {
 		if (selective_read_byte(addr, buff, i2c_id)) {
@@ -400,14 +391,6 @@ static long CAM_CAL_Ioctl(
 	}
 
 	ptempbuf = (struct stCAM_CAL_INFO_STRUCT *)pBuff;
-
-	if ((ptempbuf->u4Length <= 0) ||
-		(ptempbuf->u4Length > CAM_CAL_MAX_BUF_SIZE)) {
-		kfree(pBuff);
-		PK_DBG("Buffer Length Error!\n");
-		return -EFAULT;
-	}
-
 	pu1Params = kmalloc(ptempbuf->u4Length, GFP_KERNEL);
 	if (pu1Params == NULL) {
 		kfree(pBuff);

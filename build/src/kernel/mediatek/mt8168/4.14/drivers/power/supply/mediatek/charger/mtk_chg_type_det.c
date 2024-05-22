@@ -47,8 +47,6 @@
 #include <mach/upmu_hw.h>
 #include <mt-plat/mtk_boot.h>
 #include <mt-plat/charger_type.h>
-#include <mt-plat/battery_metrics.h>
-#include <mt-plat/charger_class.h>
 #include <pmic.h>
 
 #include "mtk_charger_intf.h"
@@ -96,9 +94,7 @@ static const char * const mtk_chg_type_name[] = {
 	"Apple 2.1A Charger",
 	"Apple 1.0A Charger",
 	"Apple 0.5A Charger",
-	"Wireless 5W Charger",
-	"Wireless 10W Charger",
-	"Wireless default Charger",
+	"Wireless Charger",
 };
 
 static void dump_charger_name(enum charger_type type)
@@ -112,9 +108,6 @@ static void dump_charger_name(enum charger_type type)
 	case APPLE_2_1A_CHARGER:
 	case APPLE_1_0A_CHARGER:
 	case APPLE_0_5A_CHARGER:
-	case WIRELESS_5W_CHARGER:
-	case WIRELESS_10W_CHARGER:
-	case WIRELESS_DEFAULT_CHARGER:
 		pr_info("%s: charger type: %d, %s\n", __func__, type,
 			mtk_chg_type_name[type]);
 		break;
@@ -156,7 +149,6 @@ static int mt_charger_online(struct mt_charger *mtk_chg)
 		if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT ||
 		    boot_mode == LOW_POWER_OFF_CHARGING_BOOT) {
 			pr_notice("%s: Unplug Charger/USB\n", __func__);
-			g_chr_type = CHARGER_UNKNOWN;
 			kernel_power_off();
 		}
 	}
@@ -178,9 +170,6 @@ static int mt_charger_get_property(struct power_supply *psy,
 			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
-		val->intval = mtk_chg->chg_type;
-		break;
-	case POWER_SUPPLY_PROP_CHARGER_TYPE:
 		val->intval = mtk_chg->chg_type;
 		break;
 	default:
@@ -230,10 +219,8 @@ static int mt_charger_set_property(struct power_supply *psy,
 		mt_charger_online(mtk_chg);
 		return 0;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
-	case POWER_SUPPLY_PROP_CHARGER_TYPE:
 		mtk_chg->chg_type = val->intval;
 		g_chr_type = val->intval;
-		bat_metrics_chrdet(mtk_chg->chg_type);
 		break;
 	default:
 		return -EINVAL;
@@ -284,23 +271,8 @@ static int mt_ac_get_property(struct power_supply *psy,
 			val->intval = 1;
 		/* Reset to 0 if charger type is USB */
 		if ((mtk_chg->chg_type == STANDARD_HOST) ||
-			(mtk_chg->chg_type == CHARGING_HOST) ||
-			(mtk_chg->chg_type == WIRELESS_5W_CHARGER) ||
-			(mtk_chg->chg_type == WIRELESS_10W_CHARGER) ||
-			(mtk_chg->chg_type == WIRELESS_DEFAULT_CHARGER))
+			(mtk_chg->chg_type == CHARGING_HOST))
 			val->intval = 0;
-
-		if (is_charger_invalid())
-			val->intval = 0;
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = !!upmu_get_rgs_chrdet();
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		if (unlikely(system_state < SYSTEM_RUNNING))
-			val->intval = 0;
-		else
-			val->intval = battery_get_vbus()*1000;
 		break;
 	default:
 		return -EINVAL;
@@ -313,24 +285,13 @@ static int mt_usb_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val)
 {
 	struct mt_charger *mtk_chg = power_supply_get_drvdata(psy);
-	int uisoc;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
-		uisoc = battery_get_uisoc();
-		if ((uisoc == 0) && (mtk_chg->chg_type == STANDARD_HOST)) {
-			pr_err("Force SDP offline\n");
-			val->intval = 0;
-			return 0;
-		}
-
 		if ((mtk_chg->chg_type == STANDARD_HOST) ||
 			(mtk_chg->chg_type == CHARGING_HOST))
 			val->intval = 1;
 		else
-			val->intval = 0;
-
-		if (is_charger_invalid())
 			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
@@ -338,15 +299,6 @@ static int mt_usb_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = 5000000;
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = !!upmu_get_rgs_chrdet();
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		if (unlikely(system_state < SYSTEM_RUNNING))
-			val->intval = 0;
-		else
-			val->intval = battery_get_vbus()*1000;
 		break;
 	default:
 		return -EINVAL;
@@ -357,21 +309,16 @@ static int mt_usb_get_property(struct power_supply *psy,
 
 static enum power_supply_property mt_charger_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_CHARGER_TYPE,
 };
 
 static enum power_supply_property mt_ac_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 static enum power_supply_property mt_usb_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 #ifdef CONFIG_EXTCON_USB_CHG
@@ -487,7 +434,6 @@ err_usb_psy:
 	power_supply_unregister(mt_chg->ac_psy);
 err_ac_psy:
 	power_supply_unregister(mt_chg->chg_psy);
-
 	return ret;
 }
 

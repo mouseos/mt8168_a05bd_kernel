@@ -278,13 +278,6 @@ static void fgauge_read_RTC_boot_status(struct gauge_device *gauge_dev)
 	else
 		rtc_invalid = 0;
 
-	if (rtc_invalid == 0) {
-		is_bat_plugout = 0;
-	} else {
-		is_bat_plugout = 1;
-		bat_plug_out_time = 31;	/*[12:8], 5 bits*/
-	}
-
 	bm_err(
 	"[%s] rtc_invalid %d plugout %d plugout_time %d spare3 0x%x\n",
 			__func__, rtc_invalid,

@@ -35,7 +35,6 @@
 #include <linux/smp.h>
 #include <linux/delay.h>
 
-extern u32 get_devinfo_with_index(u32 index);
 /*
  * In case the boot CPU is hotpluggable, we record its initial state and
  * current state separately. Certain system registers may contain different
@@ -188,8 +187,6 @@ static int c_show(struct seq_file *m, void *v)
 
 	/* backward-compatibility for thrid-party applications */
 	seq_printf(m, "Hardware\t: %s\n", machine_desc_str);
-	seq_printf(m, "Serial\t\t: %08x%08x\n",
-			get_devinfo_with_index(13), get_devinfo_with_index(12));
 
 	return 0;
 }

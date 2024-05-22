@@ -237,7 +237,6 @@ struct compat_layer_config {
 	compat_int_t ext_sel_layer;
 	compat_uint_t src_width, src_height;
 	compat_uint_t layer_caps;
-	compat_int_t secure_layer;
 };
 
 struct compat_disp_layer_info {

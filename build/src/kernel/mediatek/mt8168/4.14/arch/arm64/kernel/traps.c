@@ -85,14 +85,15 @@ static void dump_mem(const char *lvl, const char *str, unsigned long bottom,
 		memset(str, ' ', sizeof(str));
 		str[sizeof(str) - 1] = '\0';
 
-		for (p = first, i = 0; i < 8 && p < top; i++, p += 4) {
+		for (p = first, i = 0; i < (32 / 8)
+					&& p < top; i++, p += 8) {
 			if (p >= bottom && p < top) {
-				unsigned int val;
+				unsigned long val;
 
-				if (__get_user(val, (unsigned int *)p) == 0)
-					sprintf(str + i * 9, " %08x", val);
+				if (__get_user(val, (unsigned long *)p) == 0)
+					sprintf(str + i * 17, " %016lx", val);
 				else
-					sprintf(str + i * 9, " ????????");
+					sprintf(str + i * 17, " ????????????????");
 			}
 		}
 		printk("%s%04lx:%s\n", lvl, first & 0xffff, str);
@@ -130,7 +131,7 @@ static void __dump_instr(const char *lvl, struct pt_regs *regs)
 	printk("%sCode: %s\n", lvl, str);
 }
 
-void dump_instr(const char *lvl, struct pt_regs *regs)
+static void dump_instr(const char *lvl, struct pt_regs *regs)
 {
 	if (!user_mode(regs)) {
 		mm_segment_t fs = get_fs();

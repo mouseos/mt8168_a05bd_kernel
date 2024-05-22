@@ -26,36 +26,6 @@
 #include <linux/uidgid.h>
 #include <tmp_bts.h>
 #include <linux/slab.h>
-#include <linux/reboot.h>
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-#include <linux/sign_of_life.h>
-#endif
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-#include <linux/thermal_framework.h>
-#endif
-#include <charger_class.h>
-
-#define WIRELESS_CHG "wireless_chg"
-#define WIRELESS_CHG_CHANNEL_NAME "mtkts_bts3"
-
-struct mtkts_bts_channel_param {
-	int g_RAP_pull_up_R;
-	int g_TAP_over_critical_low;
-	int g_RAP_pull_up_voltage;
-	int g_RAP_ntc_table;
-	int g_RAP_ADC_channel;
-	int g_AP_TemperatureR;
-	char channelName[THERMAL_NAME_LENGTH];
-};
-
-struct BTS_TEMPERATURE {
-	__s32 BTS_Temp;
-	__s32 TemperatureR;
-};
-
-#include "ntc_table.h"
-static int auxadc_channel_num;
-static struct mtkts_bts_channel_param *bts_channel_param;
 
 static kuid_t uid = KUIDT_INIT(0);
 static kgid_t gid = KGIDT_INIT(1000);
@@ -65,7 +35,7 @@ static unsigned int interval;	/* seconds, 0 : no auto polling */
 static int trip_temp[10] = { 120000, 110000, 100000, 90000, 80000,
 				70000, 65000, 60000, 55000, 50000 };
 
-static struct thermal_zone_device **thz_dev;
+static struct thermal_zone_device *thz_dev;
 static int mtkts_bts_debug_log;
 static int kernelmode;
 static int g_THERMAL_TRIP[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -109,23 +79,370 @@ do {                                    \
 #define mtkts_bts_printk(fmt, args...) \
 pr_debug("[Thermal/TZ/BTS]" fmt, ##args)
 
+struct BTS_TEMPERATURE {
+	__s32 BTS_Temp;
+	__s32 TemperatureR;
+};
 struct gadc_thermal_info {
 	struct device *dev;
 	struct iio_channel *channel;
 };
 static struct gadc_thermal_info *gti_ntc;
+static int g_RAP_pull_up_R = BTS_RAP_PULL_UP_R;
+static int g_TAP_over_critical_low = BTS_TAP_OVER_CRITICAL_LOW;
+static int g_RAP_pull_up_voltage = BTS_RAP_PULL_UP_VOLTAGE;
+static int g_RAP_ntc_table = BTS_RAP_NTC_TABLE;
+static int g_RAP_ADC_channel = BTS_RAP_ADC_CHANNEL;
+static int g_AP_TemperatureR;
 /* BTS_TEMPERATURE BTS_Temperature_Table[] = {0}; */
 
 static struct BTS_TEMPERATURE *BTS_Temperature_Table;
 static int ntc_tbl_size;
 
-#ifdef CONFIG_THERMAL_DEBOUNCE
-#define BTS_VALID_CHANGE_1		30000
-#define BTS_VALID_CHANGE_5		60000
-#define BTS_VALID_CHANGE_10		80000
-static int pre_temp1, BTS_counter;
-static int BTS_temp_change = BTS_VALID_CHANGE_1;
+/* AP_NTC_BL197 */
+static struct BTS_TEMPERATURE BTS_Temperature_Table1[] = {
+	{-40, 74354},		/* FIX_ME */
+	{-35, 74354},		/* FIX_ME */
+	{-30, 74354},		/* FIX_ME */
+	{-25, 74354},		/* FIX_ME */
+	{-20, 74354},
+	{-15, 57626},
+	{-10, 45068},
+	{-5, 35548},
+	{0, 28267},
+	{5, 22650},
+	{10, 18280},
+	{15, 14855},
+	{20, 12151},
+	{25, 10000},		/* 10K */
+	{30, 8279},
+	{35, 6892},
+	{40, 5768},
+	{45, 4852},
+	{50, 4101},
+	{55, 3483},
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970}		/* FIX_ME */
+};
+
+/* AP_NTC_TSM_1 */
+static struct BTS_TEMPERATURE BTS_Temperature_Table2[] = {
+	{-40, 70603},		/* FIX_ME */
+	{-35, 70603},		/* FIX_ME */
+	{-30, 70603},		/* FIX_ME */
+	{-25, 70603},		/* FIX_ME */
+	{-20, 70603},
+	{-15, 55183},
+	{-10, 43499},
+	{-5, 34569},
+	{0, 27680},
+	{5, 22316},
+	{10, 18104},
+	{15, 14773},
+	{20, 12122},
+	{25, 10000},		/* 10K */
+	{30, 8294},
+	{35, 6915},
+	{40, 5795},
+	{45, 4882},
+	{50, 4133},
+	{55, 3516},
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004},		/* FIX_ME */
+	{60, 3004}		/* FIX_ME */
+};
+
+/* AP_NTC_10_SEN_1 */
+static struct BTS_TEMPERATURE BTS_Temperature_Table3[] = {
+	{-40, 74354},		/* FIX_ME */
+	{-35, 74354},		/* FIX_ME */
+	{-30, 74354},		/* FIX_ME */
+	{-25, 74354},		/* FIX_ME */
+	{-20, 74354},
+	{-15, 57626},
+	{-10, 45068},
+	{-5, 35548},
+	{0, 28267},
+	{5, 22650},
+	{10, 18280},
+	{15, 14855},
+	{20, 12151},
+	{25, 10000},		/* 10K */
+	{30, 8279},
+	{35, 6892},
+	{40, 5768},
+	{45, 4852},
+	{50, 4101},
+	{55, 3483},
+	{60, 2970},
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970},		/* FIX_ME */
+	{60, 2970}		/* FIX_ME */
+};
+
+#if 0
+/* AP_NTC_10 */
+static struct BTS_TEMPERATURE BTS_Temperature_Table4[] = {
+	{-20, 68237},
+	{-15, 53650},
+	{-10, 42506},
+	{-5, 33892},
+	{0, 27219},
+	{5, 22021},
+	{10, 17926},
+	{15, 14674},
+	{20, 12081},
+	{25, 10000},
+	{30, 8315},
+	{35, 6948},
+	{40, 5834},
+	{45, 4917},
+	{50, 4161},
+	{55, 3535},
+	{60, 3014}
+};
+#else
+/* AP_NTC_10(TSM0A103F34D1RZ) */
+static struct BTS_TEMPERATURE BTS_Temperature_Table4[] = {
+	{-40, 188500},
+	{-35, 144290},
+	{-30, 111330},
+	{-25, 86560},
+	{-20, 67790},
+	{-15, 53460},
+	{-10, 42450},
+	{-5, 33930},
+	{0, 27280},
+	{5, 22070},
+	{10, 17960},
+	{15, 14700},
+	{20, 12090},
+	{25, 10000},		/* 10K */
+	{30, 8310},
+	{35, 6940},
+	{40, 5830},
+	{45, 4910},
+	{50, 4160},
+	{55, 3540},
+	{60, 3020},
+	{65, 2590},
+	{70, 2230},
+	{75, 1920},
+	{80, 1670},
+	{85, 1450},
+	{90, 1270},
+	{95, 1110},
+	{100, 975},
+	{105, 860},
+	{110, 760},
+	{115, 674},
+	{120, 599},
+	{125, 534}
+};
 #endif
+
+/* AP_NTC_47 */
+static struct BTS_TEMPERATURE BTS_Temperature_Table5[] = {
+	{-40, 483954},		/* FIX_ME */
+	{-35, 483954},		/* FIX_ME */
+	{-30, 483954},		/* FIX_ME */
+	{-25, 483954},		/* FIX_ME */
+	{-20, 483954},
+	{-15, 360850},
+	{-10, 271697},
+	{-5, 206463},
+	{0, 158214},
+	{5, 122259},
+	{10, 95227},
+	{15, 74730},
+	{20, 59065},
+	{25, 47000},		/* 47K */
+	{30, 37643},
+	{35, 30334},
+	{40, 24591},
+	{45, 20048},
+	{50, 16433},
+	{55, 13539},
+	{60, 11210},
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210},		/* FIX_ME */
+	{60, 11210}		/* FIX_ME */
+};
+
+
+/* NTCG104EF104F(100K) */
+static struct BTS_TEMPERATURE BTS_Temperature_Table6[] = {
+	{-40, 4251000},
+	{-35, 3005000},
+	{-30, 2149000},
+	{-25, 1554000},
+	{-20, 1135000},
+	{-15, 837800},
+	{-10, 624100},
+	{-5, 469100},
+	{0, 355600},
+	{5, 271800},
+	{10, 209400},
+	{15, 162500},
+	{20, 127000},
+	{25, 100000},		/* 100K */
+	{30, 79230},
+	{35, 63180},
+	{40, 50680},
+	{45, 40900},
+	{50, 33190},
+	{55, 27090},
+	{60, 22220},
+	{65, 18320},
+	{70, 15180},
+	{75, 12640},
+	{80, 10580},
+	{85, 8887},
+	{90, 7500},
+	{95, 6357},
+	{100, 5410},
+	{105, 4623},
+	{110, 3965},
+	{115, 3415},
+	{120, 2951},
+	{125, 2560}
+};
+
+/* NCP15WF104F03RC(100K) */
+static struct BTS_TEMPERATURE BTS_Temperature_Table7[] = {
+	{-40, 4397119},
+	{-35, 3088599},
+	{-30, 2197225},
+	{-25, 1581881},
+	{-20, 1151037},
+	{-15, 846579},
+	{-10, 628988},
+	{-5, 471632},
+	{0, 357012},
+	{5, 272500},
+	{10, 209710},
+	{15, 162651},
+	{20, 127080},
+	{25, 100000},		/* 100K */
+	{30, 79222},
+	{35, 63167},
+#if defined(APPLY_PRECISE_NTC_TABLE)
+	{40, 50677},
+	{41, 48528},
+	{42, 46482},
+	{43, 44533},
+	{44, 42675},
+	{45, 40904},
+	{46, 39213},
+	{47, 37601},
+	{48, 36063},
+	{49, 34595},
+	{50, 33195},
+	{51, 31859},
+	{52, 30584},
+	{53, 29366},
+	{54, 28203},
+	{55, 27091},
+	{56, 26028},
+	{57, 25013},
+	{58, 24042},
+	{59, 23113},
+	{60, 22224},
+	{61, 21374},
+	{62, 20560},
+	{63, 19782},
+	{64, 19036},
+	{65, 18322},
+	{66, 17640},
+	{67, 16986},
+	{68, 16360},
+	{69, 15759},
+	{70, 15184},
+	{71, 14631},
+	{72, 14100},
+	{73, 13591},
+	{74, 13103},
+	{75, 12635},
+	{76, 12187},
+	{77, 11756},
+	{78, 11343},
+	{79, 10946},
+	{80, 10565},
+	{81, 10199},
+	{82,  9847},
+	{83,  9509},
+	{84,  9184},
+	{85,  8872},
+	{86,  8572},
+	{87,  8283},
+	{88,  8005},
+	{89,  7738},
+	{90,  7481},
+#else
+	{40, 50677},
+	{45, 40904},
+	{50, 33195},
+	{55, 27091},
+	{60, 22224},
+	{65, 18323},
+	{70, 15184},
+	{75, 12635},
+	{80, 10566},
+	{85, 8873},
+	{90, 7481},
+#endif
+	{95, 6337},
+	{100, 5384},
+	{105, 4594},
+	{110, 3934},
+	{115, 3380},
+	{120, 2916},
+	{125, 2522}
+};
+
 
 /* convert register to temperature  */
 static __s16 mtkts_bts_thermistor_conver_temp(__s32 Res)
@@ -197,7 +514,7 @@ static __s16 mtkts_bts_thermistor_conver_temp(__s32 Res)
 
 /* convert ADC_AP_temp_volt to register */
 /*Volt to Temp formula same with 6589*/
-static __s16 mtk_ts_bts_volt_to_temp(__s32 index, __u32 dwVolt)
+static __s16 mtk_ts_bts_volt_to_temp(__u32 dwVolt)
 {
 	__s32 TRes;
 	__s32 dwVCriAP = 0;
@@ -209,30 +526,20 @@ static __s16 mtk_ts_bts_volt_to_temp(__s32 index, __u32 dwVolt)
 	 * dwVCriAP = (TAP_OVER_CRITICAL_LOW * RAP_PULL_UP_VOLT) /
 	 *		(TAP_OVER_CRITICAL_LOW + RAP_PULL_UP_R);
 	 */
-
-	dwVCriAP =
-	    (bts_channel_param[index].g_TAP_over_critical_low *
-		bts_channel_param[index].g_RAP_pull_up_voltage) /
-			(bts_channel_param[index].g_TAP_over_critical_low +
-		bts_channel_param[index].g_RAP_pull_up_R);
+	dwVCriAP = (g_TAP_over_critical_low * g_RAP_pull_up_voltage)
+				/ (g_TAP_over_critical_low + g_RAP_pull_up_R);
 
 	if (dwVolt > dwVCriAP) {
-		TRes = bts_channel_param[index].g_TAP_over_critical_low;
+		TRes = g_TAP_over_critical_low;
 	} else {
 		/* TRes = (39000*dwVolt) / (1800-dwVolt); */
 		/* TRes = (RAP_PULL_UP_R*dwVolt) / (RAP_PULL_UP_VOLT-dwVolt); */
-		TRes = (bts_channel_param[index].g_RAP_pull_up_R * dwVolt) /
-		(bts_channel_param[index].g_RAP_pull_up_voltage - dwVolt);
+		TRes = (g_RAP_pull_up_R * dwVolt) /
+					(g_RAP_pull_up_voltage - dwVolt);
 	}
 	/* ------------------------------------------------------------------ */
-	mtkts_bts_dprintk("index=%d, dwVCriAP=%d, TRes=%d\n",
-		index, dwVCriAP, TRes);
 
-	bts_channel_param[index].g_AP_TemperatureR = TRes;
-
-	#ifdef CONFIG_THERMAL_CROWN
-		mtkts_bts_prepare_table(bts_channel_param[index].g_RAP_ntc_table);
-	#endif
+	g_AP_TemperatureR = TRes;
 
 	/* convert register to temperature */
 	BTS_TMP = mtkts_bts_thermistor_conver_temp(TRes);
@@ -242,7 +549,7 @@ static __s16 mtk_ts_bts_volt_to_temp(__s32 index, __u32 dwVolt)
 
 static DEFINE_MUTEX(BTS_lock);
 
-static int gadc_thermal_get_temp(void *data, int index, int *temp)
+static int gadc_thermal_get_temp(void *data, int *temp)
 {
 	struct gadc_thermal_info *gti = data;
 	struct iio_channel *channel;
@@ -253,16 +560,9 @@ static int gadc_thermal_get_temp(void *data, int index, int *temp)
 	if (gti == NULL)
 		return 0;
 
-	if (index >= auxadc_channel_num) {
-		dev_err(gti->dev, "%s: error: index:%d > auxadc_channel_num:%d\n",
-				__func__, index, auxadc_channel_num);
-		return -EINVAL;
-	}
-
-	channel = &gti->channel[index];
+	channel = gti->channel;
 	if (channel == NULL)
 		return 0;
-
 	ret = iio_read_channel_processed(channel, &val);
 	if (ret < 0) {
 		dev_dbg(gti->dev, "IIO channel read failed %d\n", ret);
@@ -271,7 +571,7 @@ static int gadc_thermal_get_temp(void *data, int index, int *temp)
 
 	val = val * 1500 / 4096;
 
-	higher_temp = mtk_ts_bts_volt_to_temp(index, val);
+	higher_temp = mtk_ts_bts_volt_to_temp(val);
 	if (higher_temp >= *temp)
 		*temp = higher_temp;
 	mtkts_bts_dprintk("channel = %d mV\n",  val);
@@ -280,7 +580,7 @@ static int gadc_thermal_get_temp(void *data, int index, int *temp)
 }
 
 /*int ts_AP_at_boot_time = 0;*/
-int mtkts_bts_get_hw_temp(int index)
+int mtkts_bts_get_hw_temp(void)
 {
 	int t_ret = 0;
 	int t_ret2 = 0;
@@ -289,7 +589,7 @@ int mtkts_bts_get_hw_temp(int index)
 
 	/* get HW AP temp (TSAP) */
 	/* cat /sys/class/power_supply/AP/AP_temp */
-	gadc_thermal_get_temp(gti_ntc, index, &t_ret);
+	gadc_thermal_get_temp(gti_ntc, &t_ret);
 	t_ret = t_ret * 1000;
 
 	mutex_unlock(&BTS_lock);
@@ -312,51 +612,14 @@ int mtkts_bts_get_hw_temp(int index)
 
 static int mtkts_bts_get_temp(struct thermal_zone_device *thermal, int *t)
 {
-#ifdef CONFIG_THERMAL_DEBOUNCE
-	int ret = 0;
-#endif
-	int i = thermal->type[strlen(thermal->type) - 1] - '0';
-
-	mtkts_bts_dprintk("[mtkts_bts_get_temp]index = %d\n", i);
-
-	if (i < 0 || i > auxadc_channel_num) {
-		pr_err("%s bad channel index %d, name=%s\n",
-			__func__, i, thermal->type);
-		return -EINVAL;
-	}
-
-	*t = mtkts_bts_get_hw_temp(i);
-#ifdef CONFIG_THERMAL_DEBOUNCE
-	if ((*t > 145000) || (*t < -60000)) {
-		pr_err("%s temp(%d) too high, drop this data!\n",
-					__func__, *t);
-		return -1;
-	}
-
-	ret = thermal_zone_debounce(&pre_temp1, t,
-			BTS_temp_change, &BTS_counter, thermal->type);
-#endif
-	if ((int)*t >= polling_trip_temp1) {
+	*t = mtkts_bts_get_hw_temp();
+	if ((int)*t >= polling_trip_temp1)
 		thermal->polling_delay = interval * 1000;
-#ifdef CONFIG_THERMAL_DEBOUNCE
-		BTS_temp_change = BTS_VALID_CHANGE_1;
-#endif
-	} else if ((int)*t < polling_trip_temp2) {
+	else if ((int)*t < polling_trip_temp2)
 		thermal->polling_delay = interval * polling_factor2;
-#ifdef CONFIG_THERMAL_DEBOUNCE
-		BTS_temp_change = BTS_VALID_CHANGE_10;
-#endif
-	} else {
+	else
 		thermal->polling_delay = interval * polling_factor1;
-#ifdef CONFIG_THERMAL_DEBOUNCE
-		BTS_temp_change = BTS_VALID_CHANGE_5;
-#endif
-	}
-#ifdef CONFIG_THERMAL_DEBOUNCE
-	return ret;
-#else
 	return 0;
-#endif
 }
 
 static int mtkts_bts_bind(
@@ -491,31 +754,6 @@ struct thermal_zone_device *thermal, int *temperature)
 	return 0;
 }
 
-static int mtkts_bts_thermal_notify(struct thermal_zone_device *thermal, int trip, enum thermal_trip_type type)
-{
-
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("[%s] [%s] type: [%s] Thermal shutdown bts, current temp=%d, trip=%d, trip_temp = %d\n",
-			__func__, dev_name(&thermal->device), thermal->type,
-			thermal->temperature, trip, trip_temp[trip]);
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_BTS);
-	}
-#endif
-
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("%s: thermal_shutdown notify\n", __func__);
-		last_kmsg_thermal_shutdown();
-		pr_err("%s: thermal_shutdown notify end\n", __func__);
-	}
-#endif
-	if (type == THERMAL_TRIP_CRITICAL)
-		set_shutdown_enable_dcap(&thermal->device);
-
-	return 0;
-}
-
 /* bind callback functions to thermalzone */
 static struct thermal_zone_device_ops mtkts_BTS_dev_ops = {
 	.bind = mtkts_bts_bind,
@@ -526,7 +764,6 @@ static struct thermal_zone_device_ops mtkts_BTS_dev_ops = {
 	.get_trip_type = mtkts_bts_get_trip_type,
 	.get_trip_temp = mtkts_bts_get_trip_temp,
 	.get_crit_temp = mtkts_bts_get_crit_temp,
-	.notify = mtkts_bts_thermal_notify,
 };
 
 static int mtkts_bts_read(struct seq_file *m, void *v)
@@ -787,17 +1024,11 @@ void mtkts_bts_prepare_table(int table_num)
 
 static int mtkts_bts_param_read(struct seq_file *m, void *v)
 {
-	__s32 i;
-
-	for (i = 0; i < auxadc_channel_num; i++) {
-		seq_printf(m, "%d\t", bts_channel_param[i].g_RAP_pull_up_R);
-		seq_printf(m, "%d\t",
-		bts_channel_param[i].g_RAP_pull_up_voltage);
-		seq_printf(m, "%d\t",
-		bts_channel_param[i].g_TAP_over_critical_low);
-		seq_printf(m, "%d\t", bts_channel_param[i].g_RAP_ntc_table);
-		seq_printf(m, "%d\n", bts_channel_param[i].g_RAP_ADC_channel);
-	}
+	seq_printf(m, "%d\n", g_RAP_pull_up_R);
+	seq_printf(m, "%d\n", g_RAP_pull_up_voltage);
+	seq_printf(m, "%d\n", g_TAP_over_critical_low);
+	seq_printf(m, "%d\n", g_RAP_ntc_table);
+	seq_printf(m, "%d\n", g_RAP_ADC_channel);
 
 	return 0;
 }
@@ -850,22 +1081,10 @@ struct file *file, const char __user *buffer, size_t count, loff_t *data)
 		&ptr_mtktsbts_parm_data->ntc_table,
 		&ptr_mtktsbts_parm_data->adc_channel) >= 8) {
 
-		__s32 i;
-
-		for (i = 0; i < auxadc_channel_num; i++) {
-			if (bts_channel_param[i].g_RAP_ADC_channel == ptr_mtktsbts_parm_data->adc_channel)
-				break;
-		}
-		if (i == auxadc_channel_num) {
-			pr_err("%s bad channel argument %d\n", __func__, ptr_mtktsbts_parm_data->adc_channel);
-			kfree(ptr_mtktsbts_parm_data);
-			return -EINVAL;
-		}
-
 		if (!strcmp(ptr_mtktsbts_parm_data->pull_R, "PUP_R")) {
-			bts_channel_param[i].g_RAP_pull_up_R = ptr_mtktsbts_parm_data->valR;
+			g_RAP_pull_up_R = ptr_mtktsbts_parm_data->valR;
 			mtkts_bts_dprintk("g_RAP_pull_up_R=%d\n",
-							bts_channel_param[i].g_RAP_pull_up_R);
+							g_RAP_pull_up_R);
 		} else {
 			mtkts_bts_printk(
 				"[%s] bad PUP_R argument\n", __func__);
@@ -874,9 +1093,9 @@ struct file *file, const char __user *buffer, size_t count, loff_t *data)
 		}
 
 		if (!strcmp(ptr_mtktsbts_parm_data->pull_V, "PUP_VOLT")) {
-			bts_channel_param[i].g_RAP_pull_up_voltage = ptr_mtktsbts_parm_data->valV;
+			g_RAP_pull_up_voltage = ptr_mtktsbts_parm_data->valV;
 			mtkts_bts_dprintk("g_Rat_pull_up_voltage=%d\n",
-							bts_channel_param[i].g_RAP_pull_up_voltage);
+							g_RAP_pull_up_voltage);
 		} else {
 			mtkts_bts_printk(
 				"[%s] bad PUP_VOLT argument\n", __func__);
@@ -886,9 +1105,10 @@ struct file *file, const char __user *buffer, size_t count, loff_t *data)
 
 		if (!strcmp(ptr_mtktsbts_parm_data->overcrilow,
 			"OVER_CRITICAL_L")) {
-			bts_channel_param[i].g_TAP_over_critical_low = ptr_mtktsbts_parm_data->over_cri_low;
+			g_TAP_over_critical_low =
+					ptr_mtktsbts_parm_data->over_cri_low;
 			mtkts_bts_dprintk("g_TAP_over_critical_low=%d\n",
-						bts_channel_param[i].g_TAP_over_critical_low);
+						g_TAP_over_critical_low);
 		} else {
 			mtkts_bts_printk(
 				"[%s] bad OVERCRIT_L argument\n", __func__);
@@ -897,9 +1117,9 @@ struct file *file, const char __user *buffer, size_t count, loff_t *data)
 		}
 
 		if (!strcmp(ptr_mtktsbts_parm_data->NTC_TABLE, "NTC_TABLE")) {
-			bts_channel_param[i].g_RAP_ntc_table = ptr_mtktsbts_parm_data->ntc_table;
+			g_RAP_ntc_table = ptr_mtktsbts_parm_data->ntc_table;
 			mtkts_bts_dprintk("g_RAP_ntc_table=%d\n",
-						bts_channel_param[i].g_RAP_ntc_table);
+							g_RAP_ntc_table);
 		} else {
 			mtkts_bts_printk(
 				"[%s] bad NTC_TABLE argument\n", __func__);
@@ -907,12 +1127,32 @@ struct file *file, const char __user *buffer, size_t count, loff_t *data)
 			return -EINVAL;
 		}
 
+		/* external pin: 0/1/12/13/14/15,
+		 * can't use pin:2/3/4/5/6/7/8/9/10/11,
+		 * choose "adc_channel=11" to check if there is any param input
+		 */
+		if ((ptr_mtktsbts_parm_data->adc_channel >= 2)
+		&& (ptr_mtktsbts_parm_data->adc_channel <= 11))
+			/* check unsupport pin value, if unsupport,
+			 * set channel = 1 as default setting.
+			 */
+			g_RAP_ADC_channel = AUX_IN0_NTC;
+		else {
+			/* check if there is any param input,
+			 * if not using default g_RAP_ADC_channel:1
+			 */
+			if (ptr_mtktsbts_parm_data->adc_channel != 11)
+				g_RAP_ADC_channel =
+					ptr_mtktsbts_parm_data->adc_channel;
+			else
+				g_RAP_ADC_channel = AUX_IN0_NTC;
+		}
 		mtkts_bts_dprintk("adc_channel=%d\n",
 					ptr_mtktsbts_parm_data->adc_channel);
 		mtkts_bts_dprintk("g_RAP_ADC_channel=%d\n",
-					bts_channel_param[i].g_RAP_ADC_channel);
+						g_RAP_ADC_channel);
 
-		mtkts_bts_prepare_table(bts_channel_param[i].g_RAP_ntc_table);
+		mtkts_bts_prepare_table(g_RAP_ntc_table);
 
 		kfree(ptr_mtktsbts_parm_data);
 		return count;
@@ -957,39 +1197,23 @@ static void mtkts_bts_start_thermal_timer(void)
 
 static int mtkts_bts_register_thermal(void)
 {
-	__s32 i;
-	bool enabled_wireless_chg_ntc = false;
-
 	mtkts_bts_dprintk("[%s]\n", __func__);
 
-	if (get_charger_by_name(WIRELESS_CHG) != NULL)
-		enabled_wireless_chg_ntc = true;
-
-	for (i = 0; i < auxadc_channel_num; i++) {
-		if (!enabled_wireless_chg_ntc &&
-		    !strcmp(bts_channel_param[i].channelName, WIRELESS_CHG_CHANNEL_NAME)) {
-			mtkts_bts_dprintk("[%s] no wireless charging ntc\n", __func__);
-			continue;
-		}
-
-		thz_dev[i] = mtk_thermal_zone_device_register(
-		bts_channel_param[i].channelName, num_trip, NULL,
-		&mtkts_BTS_dev_ops, 0, 0, 0, interval * 1000);
-	}
+	/* trips : trip 0~1 */
+	thz_dev = mtk_thermal_zone_device_register("mtktsAP", num_trip, NULL,
+						&mtkts_BTS_dev_ops, 0, 0, 0,
+						interval * 1000);
 
 	return 0;
 }
 
 static void mtkts_bts_unregister_thermal(void)
 {
-	__s32 i;
 	mtkts_bts_dprintk("[%s]\n", __func__);
 
-	for (i = 0; i < auxadc_channel_num; i++) {
-		if (thz_dev[i]) {
-			mtk_thermal_zone_device_unregister(thz_dev[i]);
-			thz_dev[i] = NULL;
-		}
+	if (thz_dev) {
+		mtk_thermal_zone_device_unregister(thz_dev);
+		thz_dev = NULL;
 	}
 }
 
@@ -1029,7 +1253,7 @@ static int __init mtkts_bts_init(void)
 	mtkts_bts_dprintk("[%s]\n", __func__);
 
 	/* setup default table */
-	mtkts_bts_prepare_table(bts_channel_param[0].g_RAP_ntc_table);
+	mtkts_bts_prepare_table(g_RAP_ntc_table);
 
 	mtkts_AP_dir = mtk_thermal_get_proc_drv_therm_dir_entry();
 	if (!mtkts_AP_dir) {
@@ -1063,104 +1287,12 @@ static void __exit mtkts_bts_exit(void)
 #endif
 }
 
-late_initcall(mtkts_bts_init);
+module_init(mtkts_bts_init);
 module_exit(mtkts_bts_exit);
 
-static void parse_node_int(const struct device_node *np,
-			    const char *node_name, int *cust_val)
-{
-	u32 val = 0;
-
-	if (of_property_read_u32(np, node_name, &val) == 0) {
-		(*cust_val) = (int)val;
-		pr_debug("Get %s %d\n", node_name, *cust_val);
-	} else
-		pr_notice("Get %s failed\n", node_name);
-}
-
-static void parse_node_string_index(const struct device_node *np,
-				const char *node_name,
-				int index,
-				int max_len,
-				char *cust_string)
-{
-	const char *string;
-	if (of_property_read_string_index(np, node_name, index, &string) == 0) {
-		strncpy(cust_string, string, max_len);
-		pr_debug("Get %s %s\n", node_name, cust_string);
-	} else
-		pr_notice("Get %s failed\n", node_name);
-}
-
-static void of_get_bts_init_data(struct device_node *np,
-			struct mtkts_bts_channel_param *bts_param)
-{
-	parse_node_int(np, "pull_up_r", &(bts_param->g_RAP_pull_up_R));
-	parse_node_int(np, "over_critical_low", &(bts_param->g_TAP_over_critical_low));
-	parse_node_int(np, "pull_up_voltage", &(bts_param->g_RAP_pull_up_voltage));
-	parse_node_int(np, "ntc_table", &(bts_param->g_RAP_ntc_table));
-	parse_node_int(np, "adc_channel", &(bts_param->g_RAP_ADC_channel));
-	parse_node_int(np, "temperature_r", &(bts_param->g_AP_TemperatureR));
-	parse_node_string_index(np, "channel_name", 0,
-		THERMAL_NAME_LENGTH - 1, bts_param->channelName);
-}
-
-static int init_cust_data_from_dt(struct platform_device *dev)
-{
-	__s32 i = 0;
-	struct device_node *np = dev->dev.of_node;
-	struct device_node *sub_np;
-
-	auxadc_channel_num = of_get_child_count(np);
-	if (!auxadc_channel_num) {
-		return -EINVAL;
-	}
-	pr_notice("%s: auxadc_channel_num = %d\n", __func__, auxadc_channel_num);
-
-	bts_channel_param = devm_kzalloc(&dev->dev,
-			 sizeof(struct mtkts_bts_channel_param) * auxadc_channel_num,
-			 GFP_KERNEL);
-	if (!bts_channel_param) {
-		pr_err("%s: bts_channel_param failed to allocate memory!\n", __func__);
-		return -ENOMEM;
-	}
-
-	thz_dev = devm_kzalloc(&dev->dev,
-			 sizeof(struct thermal_zone_device *) * auxadc_channel_num,
-			 GFP_KERNEL);
-	if (!thz_dev) {
-		pr_err("%s: thz_dev failed to allocate memory!\n", __func__);
-		goto thz_dev_err;
-	}
-
-	for_each_child_of_node(np, sub_np) {
-		of_get_bts_init_data(sub_np, &(bts_channel_param[i]));
-
-		pr_notice("bts_channel_param[%d].g_RAP_pull_up_R %d\n",
-			i, bts_channel_param[i].g_RAP_pull_up_R);
-		pr_notice("bts_channel_param[%d].g_TAP_over_critical_low %d\n",
-			i, bts_channel_param[i].g_TAP_over_critical_low);
-		pr_notice("bts_channel_param[%d].g_RAP_pull_up_voltage %d\n",
-			i, bts_channel_param[i].g_RAP_pull_up_voltage);
-		pr_notice("bts_channel_param[%d].g_RAP_ntc_table %d\n", i,
-			bts_channel_param[i].g_RAP_ntc_table);
-		pr_notice("bts_channel_param[%d].g_RAP_ADC_channel %d\n",
-			i, bts_channel_param[i].g_RAP_ADC_channel);
-		pr_notice("bts_channel_param[%d].g_AP_TemperatureR %d\n",
-			i, bts_channel_param[i].g_AP_TemperatureR);
-		pr_notice("bts_channel_param[%d].channelName %s\n",
-			i, bts_channel_param[i].channelName);
-
-		i++;
-	}
-
-	return 0;
-
-thz_dev_err:
-	devm_kfree(&dev->dev, bts_channel_param);
-	return -ENOMEM;
-}
-
+static const struct thermal_zone_of_device_ops gadc_thermal_ops = {
+	.get_temp = gadc_thermal_get_temp,
+};
 static int gadc_thermal_probe(struct platform_device *pdev)
 {
 	struct gadc_thermal_info *gti;
@@ -1176,17 +1308,10 @@ static int gadc_thermal_probe(struct platform_device *pdev)
 	gti_ntc = gti;
 	gti->dev = &pdev->dev;
 	platform_set_drvdata(pdev, gti);
-	gti->channel = iio_channel_get_all(&pdev->dev);
+	gti->channel = iio_channel_get(&pdev->dev, "sensor-channel");
 	if (IS_ERR(gti->channel)) {
 		ret = PTR_ERR(gti->channel);
 		dev_dbg(&pdev->dev, "IIO channel not found: %d\n", ret);
-		return ret;
-	}
-
-	ret = init_cust_data_from_dt(pdev);
-	if (ret) {
-		dev_err(&pdev->dev, "%s: init dts data error\n", __func__);
-		iio_channel_release_all(gti->channel);
 		return ret;
 	}
 #if 0

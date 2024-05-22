@@ -110,6 +110,7 @@ int ssusb_phy_power_on(struct ssusb_mtk *ssusb)
 		if (ret)
 			goto power_off_phy;
 	}
+
 	return 0;
 
 power_off_phy:
@@ -157,7 +158,7 @@ int ssusb_clks_enable(struct ssusb_mtk *ssusb)
 
 	ret = clk_prepare_enable(ssusb->xhci_clk);
 	if (ret) {
-		dev_info(ssusb->dev, "failed to enable xhci_clk\n");
+		dev_err(ssusb->dev, "failed to enable xhci_clk\n");
 		goto xhci_clk_err;
 	}
 
@@ -284,6 +285,7 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 	struct otg_switch_mtk *otg_sx = &ssusb->otg_switch;
 	struct device *dev = &pdev->dev;
 	struct regulator *vbus;
+	struct regulator *vbst_5v;
 	struct resource *res;
 	int i;
 	int ret;
@@ -320,7 +322,7 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 			"phys", "#phy-cells");
 	if (ssusb->num_phys > 0) {
 		ssusb->phys = devm_kcalloc(dev, ssusb->num_phys,
-					sizeof(*ssusb->phys), GFP_KERNEL);
+				sizeof(*ssusb->phys), GFP_KERNEL);
 		if (!ssusb->phys)
 			return -ENOMEM;
 	} else {
@@ -365,16 +367,20 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 	if (ssusb->dr_mode != USB_DR_MODE_OTG)
 		return 0;
 
-	otg_sx->use_typec = of_property_read_bool(node, "mediatek,use-typec");
 	/* if dual-role mode is supported */
-	if (!otg_sx->use_typec) {
-		vbus = devm_regulator_get(&pdev->dev, "vbus");
-		if (IS_ERR(vbus)) {
-			dev_err(dev, "failed to get vbus\n");
-			return PTR_ERR(vbus);
-		}
-		otg_sx->vbus = vbus;
+	vbus = devm_regulator_get(&pdev->dev, "vbus");
+	if (IS_ERR(vbus)) {
+		dev_err(dev, "failed to get vbus\n");
+		return PTR_ERR(vbus);
 	}
+	otg_sx->vbus = vbus;
+
+	vbst_5v = devm_regulator_get(&pdev->dev, "vbst_5v");
+	if (IS_ERR(vbst_5v)) {
+		dev_err(dev, "failed to get vbst_5v\n");
+		return PTR_ERR(vbst_5v);
+	}
+	otg_sx->vbst_5v = vbst_5v;
 
 	otg_sx->is_u3_drd = of_property_read_bool(node, "mediatek,usb3-drd");
 	otg_sx->manual_drd_enabled =
@@ -397,6 +403,15 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 		ssusb->dr_mode, otg_sx->is_u3_drd, ssusb->keep_ao);
 
 	return 0;
+}
+
+static void otg_detect_work_func(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct ssusb_mtk *ssusb =
+		container_of(dwork, struct ssusb_mtk, otg_detect_dwork);
+
+	ssusb_otg_detect(ssusb);
 }
 
 static int mtu3_probe(struct platform_device *pdev)
@@ -483,6 +498,7 @@ static int mtu3_probe(struct platform_device *pdev)
 	}
 
 	sloa_suspend_infra_power(true);
+	INIT_DELAYED_WORK(&ssusb->otg_detect_dwork, otg_detect_work_func);
 
 	return 0;
 
@@ -565,19 +581,23 @@ static int __maybe_unused mtu3_suspend(struct device *dev)
 	else
 		ssusb->infra_on = false;
 
-	if (ssusb->is_host || ssusb->keep_ao)
-		ssusb_wakeup_enable(ssusb);
+	if (ssusb->keep_ao || ssusb->is_host) {
+		if (!ssusb->infra_on)
+			ssusb_host_exit(ssusb);
+		else
+			ssusb_host_disable(ssusb, true);
 
-	dev_dbg(dev, "Do phy power and clock off\n");
-	if (ssusb->keep_ao) {
-		ssusb_clks_disable(ssusb);
+		dev_dbg(dev, "Do phy power and clock off\n");
 		ssusb_phy_power_off(ssusb);
+		ssusb_clks_disable(ssusb);
 	}
-
 	if (!ssusb->infra_on) {
 		dev_dbg(dev, "Infra power off\n");
 		sloa_suspend_infra_power(false);
 	}
+
+	if (ssusb->is_host || ssusb->keep_ao)
+		ssusb_wakeup_enable(ssusb);
 
 	return 0;
 }
@@ -585,26 +605,50 @@ static int __maybe_unused mtu3_suspend(struct device *dev)
 static int __maybe_unused mtu3_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
+	struct device_node *node = pdev->dev.of_node;
 	struct ssusb_mtk *ssusb = platform_get_drvdata(pdev);
+	void __iomem *ibase = ssusb->ippc_base;
 	int ret;
+
+	if (ssusb->is_host || ssusb->keep_ao)
+		ssusb_wakeup_disable(ssusb);
 
 	if (!ssusb->infra_on)
 		sloa_suspend_infra_power(true);
 
-	if (ssusb->keep_ao) {
+	if (ssusb->keep_ao || ssusb->is_host) {
 		ret = ssusb_clks_enable(ssusb);
 		if (ret)
 			goto clks_err;
+
 		ret = ssusb_phy_power_on(ssusb);
 		if (ret)
 			goto err_power_on;
+
+		if (ssusb->keep_ao && !ssusb->infra_on) {
+			ssusb_ip_sw_reset(ssusb);
+			mtu3_setbits(ibase, U3D_SSUSB_DEV_RST_CTRL,
+				SSUSB_DEV_SW_RST);
+			udelay(1);
+			mtu3_clrbits(ibase, U3D_SSUSB_DEV_RST_CTRL,
+				SSUSB_DEV_SW_RST);
+			ret = ssusb_host_init(ssusb, node);
+			if (ret) {
+				dev_err(dev, "failed to initialize host\n");
+				goto err_host_init;
+			}
+		}
+		else
+			ssusb_host_enable(ssusb);
 	}
 
-	if (ssusb->is_host)
-		ssusb_wakeup_disable(ssusb);
+	if (!ssusb->infra_on)
+		schedule_delayed_work(&ssusb->otg_detect_dwork, 1*HZ);
 
 	return 0;
 
+err_host_init:
+	ssusb_phy_power_off(ssusb);
 err_power_on:
 	ssusb_clks_disable(ssusb);
 clks_err:

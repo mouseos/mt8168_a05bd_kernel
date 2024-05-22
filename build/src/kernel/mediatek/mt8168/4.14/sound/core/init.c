@@ -420,7 +420,7 @@ int snd_card_disconnect(struct snd_card *card)
 		mfile->file->f_op = &snd_shutdown_f_ops;
 		fops_get(mfile->file->f_op);
 	}
-	spin_unlock(&card->files_lock);
+	spin_unlock(&card->files_lock);	
 
 	/* notify all connected devices about disconnection */
 	/* at this point, they cannot respond to any calls except release() */
@@ -448,8 +448,9 @@ int snd_card_disconnect(struct snd_card *card)
 #ifdef CONFIG_PM
 	wake_up(&card->power_sleep);
 #endif
-	return 0;
+	return 0;	
 }
+
 EXPORT_SYMBOL(snd_card_disconnect);
 
 static int snd_card_do_free(struct snd_card *card)

@@ -38,7 +38,7 @@
 #include <linux/soc/mediatek/mtk-cmdq.h>
 #include <linux/mailbox/mtk-cmdq-mailbox.h>
 
-#ifdef CONFIG_MTK_IOMMU_V2
+#if defined(CONFIG_MTK_IOMMU) || defined(CONFIG_MTK_IOMMU_V2)
 #include <linux/iommu.h>
 #endif
 #include "mtk_vcodec_mem.h"
@@ -82,7 +82,7 @@
 /* vcu extended iova address*/
 #define VCU_PMEM0_IOVA(vcu_data) (vcu_data->extmem.p_iova)
 #define VCU_DMEM0_IOVA(vcu_data) (vcu_data->extmem.d_iova)
-#define VCU_SHMEM_SIZE 0x150000
+#define VCU_SHMEM_SIZE 0x195000
 
 #define MAP_SHMEM_ALLOC_BASE 0x80000000UL
 #define MAP_SHMEM_ALLOC_RANGE VCU_SHMEM_SIZE
@@ -105,7 +105,9 @@ static char *vcodec_param_string = "";
 inline int ipi_id_to_inst_id(int id)
 {
 	/* Assume VENC uses instance 1 and others use 0. */
-	if ((id < IPI_VENC_COMMON && id >= IPI_VCU_INIT) || id == IPI_CAMERA)
+	if ((id < IPI_VENC_COMMON && id >= IPI_VCU_INIT) ||
+	     id == IPI_CAMERA_MAIN || id == IPI_CAMERA_SUB ||
+	     id == IPI_MDP)
 		return 0;
 	else
 		return 1;
@@ -463,11 +465,6 @@ static int vcu_ipi_get(struct mtk_vcu *vcu, unsigned long arg)
 	user_data_addr = (unsigned char *)arg;
 	ret = (long)copy_from_user(&share_buff_data, user_data_addr,
 				   (unsigned long)sizeof(struct share_obj));
-	if (ret != 0) {
-		pr_debug("[VCU] %s(%d) copy from user failed!\n", __func__,
-			__LINE__);
-		return -EINVAL;
-	}
 	i = ipi_id_to_inst_id(share_buff_data.id);
 
 	/* mutex protection here is unnecessary, since different app service
@@ -556,6 +553,7 @@ static int vcu_check_reg_base(struct mtk_vcu *vcu,
 
 	return -EINVAL;
 }
+
 static void vcu_set_gce_cmd(struct cmdq_pkt *pkt, struct mtk_vcu *vcu,
 				struct mtk_vcu_queue *q, unsigned char cmd,
 				u64 addr, u64 data, u32 mask)
@@ -665,29 +663,16 @@ static int vcu_gce_cmd_flush(struct mtk_vcu *vcu,
 	user_data_addr = (unsigned char *)arg;
 	ret = (long)copy_from_user(&buff->cmdq_buff, user_data_addr,
 		(unsigned long)sizeof(struct gce_cmdq_obj));
-	if (ret != 0) {
-		pr_debug("[VCU] %s(%d) copy from user failed!\n", __func__,
-			__LINE__);
-		kfree(cmds);
-		kfree(buff);
-		return -EINVAL;
-	}
 	user_data_addr =
 		(unsigned char *)(unsigned long)buff->cmdq_buff.cmds_user_ptr;
 	ret = (long)copy_from_user(cmds, user_data_addr,
 		(unsigned long)sizeof(struct gce_cmds));
-	if (ret != 0) {
-		pr_debug("[VCU] %s(%d) copy from user failed!\n", __func__,
-			__LINE__);
-		kfree(cmds);
-		kfree(buff);
-		return -EINVAL;
-	}
 	buff->cmdq_buff.cmds_user_ptr = (u64)(unsigned long)cmds;
 
 	cl = buff->cmdq_buff.codec_type ? vcu->clt_vdec : vcu->clt_venc;
 	buff->vcu_ptr = vcu;
 	vcuid = vcu->vcuid;
+	buff->vcu_queue = q;
 
 	while (vcu_ptr[vcuid]->is_entering_suspend == 1) {
 		suspend_block_cnt++;
@@ -709,10 +694,8 @@ static int vcu_gce_cmd_flush(struct mtk_vcu *vcu,
 	atomic_inc(&vcu->gce_job_cnt[i]);
 	mutex_unlock(&vcu->vcu_mutex[i]);
 
-	if (cmdq_pkt_cl_create(&pkt_ptr, cl) != 0) {
+	if (cmdq_pkt_cl_create(&pkt_ptr, cl) != 0)
 		pr_info("[VCU] cmdq_pkt_cl_create fail\n");
-		pkt_ptr = NULL;
-	}
 	buff->pkt_ptr = pkt_ptr;
 
 	/* clear all registered event */
@@ -752,11 +735,7 @@ static int vcu_wait_gce_callback(struct mtk_vcu *vcu, unsigned long arg)
 	user_data_addr = (unsigned char *)arg;
 	ret = (long)copy_from_user(&obj, user_data_addr,
 				   (unsigned long)sizeof(struct gce_obj));
-	if (ret != 0) {
-		pr_debug("[VCU] %s(%d) copy from user failed!\n", __func__,
-			__LINE__);
-		return -EINVAL;
-	}
+
 	i = obj.codec_type ? VCU_VDEC : VCU_VENC;
 	pr_info("[VCU] %s: type %d handle %llx\n", __func__, obj.codec_type,
 		obj.gce_handle);
@@ -812,7 +791,7 @@ void *vcu_mapping_dm_addr(struct platform_device *pdev,
 	uintptr_t d_off = d_vma - VCU_DMEM0_VMA(vcu);
 	uintptr_t d_va;
 
-	if (dtcm_dmem_addr == 0UL || d_off >= VCU_DMEM0_LEN(vcu)) {
+	if (dtcm_dmem_addr == 0UL || d_off > VCU_DMEM0_LEN(vcu)) {
 		dev_dbg(&pdev->dev, "[VCU] %s: Invalid vma 0x%lx len %lx\n",
 			__func__, dtcm_dmem_addr, VCU_DMEM0_LEN(vcu));
 		return NULL;
@@ -931,9 +910,7 @@ void vcu_get_task(struct task_struct **task, struct files_struct **f,
 		files = NULL;
 	}
 
-	if (task)
 	*task = vcud_task;
-	if (f)
 	*f = files;
 }
 EXPORT_SYMBOL_GPL(vcu_get_task);
@@ -1023,9 +1000,8 @@ static int vcu_init_ipi_handler(void *data, unsigned int len, void *priv)
 
 			atomic_set(&vcu->vdec_log_got, 1);
 			wake_up(&vcu->vdec_log_get_wq);
-			vcu_get_file_lock();
-			vcu_get_task(NULL, NULL, 1);
-			vcu_put_file_lock();
+			vcud_task = NULL;
+			files = NULL;
 		}
 		dev_info(vcu->dev, "[VCU] vpud killed\n");
 
@@ -1055,17 +1031,9 @@ static int mtk_vcu_open(struct inode *inode, struct file *file)
 	else if (strcmp(current->comm, "mdpd") == 0)
 		vcuid = MTK_VCU_MDP;
 	else if (strcmp(current->comm, "vpud") == 0) {
-		vcu_get_file_lock();
-		if (vcud_task &&
-			(current->tgid != vcud_task->tgid ||
-			current->group_leader != vcud_task->group_leader)) {
-			vcu_put_file_lock();
-			return -EACCES;
-		}
-		vcud_task = current->group_leader;
+		vcud_task = current;
 		files = vcud_task->files;
-		vcu_put_file_lock();
-		vcuid = 0;
+		vcuid = MTK_VCU_VCODEC;
 
 	} else {
 		pr_debug("[VCU] thread name: %s\n", current->comm);
@@ -1081,16 +1049,16 @@ static int mtk_vcu_open(struct inode *inode, struct file *file)
 
 	vcu_ptr[vcuid]->open_cnt++;
 	vcu_ptr[vcuid]->abort = false;
-
-	pr_info("[VCU] %s name: %s pid %d tgid %d open_cnt %d current %p group_leader %p\n",
-		__func__, current->comm, current->pid, current->tgid,
-		vcu_ptr[vcuid]->open_cnt, current, current->group_leader);
+	pr_info("[VCU] %s name: %s pid %d open_cnt %d\n", __func__,
+		current->comm, current->tgid, vcu_ptr[vcuid]->open_cnt);
 
 	return 0;
 }
 
 static int mtk_vcu_release(struct inode *inode, struct file *file)
 {
+	struct task_struct *task = NULL;
+	struct files_struct *f = NULL;
 	struct mtk_vcu *vcu_dev;
 	int vcuid;
 	struct mtk_vcu_queue *vcu_queue =
@@ -1107,7 +1075,7 @@ static int mtk_vcu_release(struct inode *inode, struct file *file)
 		/* reset vpud due to abnormal situations. */
 		vcu_ptr[vcuid]->abort = true;
 		vcu_get_file_lock();
-		vcu_get_task(NULL, NULL, 1);
+		vcu_get_task(&task, &f, 1);
 		vcu_put_file_lock();
 	}
 	return 0;
@@ -1156,7 +1124,7 @@ static int mtk_vcu_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long pa_start_base = pa_start;
 	unsigned long pa_end = pa_start + length;
 	int i;
-#ifdef CONFIG_MTK_IOMMU_V2
+#if defined(CONFIG_MTK_IOMMU) || defined(CONFIG_MTK_IOMMU_V2)
 	unsigned long start = vma->vm_start;
 	unsigned long pos = 0;
 #endif
@@ -1216,7 +1184,7 @@ static int mtk_vcu_mmap(struct file *file, struct vm_area_struct *vma)
 			pa_start -= MAP_SHMEM_MM_CACHEABLE_BASE;
 		else
 			pa_start -= MAP_SHMEM_MM_BASE;
-#if defined CONFIG_MTK_IOMMU_V2
+#if defined(CONFIG_MTK_IOMMU) || defined(CONFIG_MTK_IOMMU_V2)
 		while (length > 0) {
 			vma->vm_pgoff = iommu_iova_to_phys(vcu_dev->io_domain,
 							   pa_start + pos);
@@ -1427,11 +1395,7 @@ static long mtk_vcu_unlocked_ioctl(struct file *file, unsigned int cmd,
 		ret = (long)copy_from_user(
 			&mem_buff_data, user_data_addr,
 			(unsigned long)sizeof(struct mem_obj));
-		if (ret != 0L) {
-			pr_debug("[VCU] %s(%d) copy from user failed!\n", __func__,
-				__LINE__);
-			return -EINVAL;
-		}
+
 		vcu_buffer_cache_sync(
 			dev, vcu_queue, (dma_addr_t)mem_buff_data.iova,
 			(size_t)mem_buff_data.len,
@@ -1748,7 +1712,7 @@ static int mtk_vcu_probe(struct platform_device *pdev)
 	}
 	vcu_mtkdev[vcuid] = vcu;
 
-#ifdef CONFIG_MTK_IOMMU_V2
+#if defined(CONFIG_MTK_IOMMU) || defined(CONFIG_MTK_IOMMU_V2)
 	vcu_mtkdev[vcuid]->io_domain = iommu_get_domain_for_dev(dev);
 	if (vcu_mtkdev[vcuid]->io_domain == NULL) {
 		dev_err(dev, "[VCU] vcuid: %d get iommu domain fail !!\n",
@@ -1918,8 +1882,9 @@ static int mtk_vcu_probe(struct platform_device *pdev)
 	vcu->is_entering_suspend = 0;
 
 	vcu_ptr[vcuid] = vcu;
-	if (vcuid == MTK_VCU_VCODEC) {
-		pm_notifier(mtk_vcu_suspend_notifier, 0);
+	if (vcuid == MTK_VCU_VCODEC || vcuid == MTK_VCU_MDP) {
+		if (vcuid == MTK_VCU_VCODEC)
+			pm_notifier(mtk_vcu_suspend_notifier, 0);
 
 		ret = vcu_alloc_d_ext_mem(vcu, VCU_SHMEM_SIZE);
 		if (ret != 0) {
@@ -1963,6 +1928,9 @@ static const struct of_device_id mtk_vcu_match[] = {
 	},
 	{
 		.compatible = "mediatek-vcu",
+	},
+	{
+		.compatible = "mediatek,mt8168-vcu",
 	},
 	{},
 };

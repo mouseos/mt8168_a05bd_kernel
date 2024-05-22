@@ -380,8 +380,10 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	/* wait until PWR_ACK = 1 */
 	ret = readx_poll_timeout(scpsys_domain_is_on, scpd, tmp, tmp > 0,
 				 MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(scp->dev, "pwr ack timeout %s\n", genpd->name);
 		goto err_pwr_ack;
+	}
 
 	val &= ~PWR_CLK_DIS_BIT;
 	writel(val, ctl_addr);
@@ -447,14 +449,13 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 
 	ret = scpsys_bus_protect_enable(scpd);
 	if (ret < 0) {
-		dev_err(scp->dev, "Failed to bus_protect_enable %s\n",
-			genpd->name);
+		dev_err(scp->dev, "bus protect failed %s\n", genpd->name);
 		goto out;
 	}
 
 	ret = scpsys_sram_disable(scpd, ctl_addr);
 	if (ret < 0) {
-		dev_err(scp->dev, "Failed to sram_disable %s\n", genpd->name);
+		dev_err(scp->dev, "sram disable failed %s\n", genpd->name);
 		goto out;
 	}
 
@@ -481,7 +482,7 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	ret = readx_poll_timeout(scpsys_domain_is_on, scpd, tmp, tmp == 0,
 				 MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 	if (ret < 0) {
-		dev_err(scp->dev, "Failed to PWR_ACK %s\n", genpd->name);
+		dev_err(scp->dev, "pwr ack timeout %s\n", genpd->name);
 		goto out;
 	}
 
@@ -1192,7 +1193,7 @@ static const struct scp_domain_data scp_domain_data_mt8168[] = {
 			BUS_PROT(IFR_TYPE, 0x2a8, 0x2ac, 0, 0x258,
 				BIT(21), BIT(21), BIT(21)),
 		},
-		.subsys_clk_prefix = "conn",
+		.basic_clk_name = {"conn", "conn1"},
 		.caps = MTK_SCPD_ACTIVE_WAKEUP | MTK_SCPD_KEEP_DEFAULT_OFF,
 	},
 	[MT8168_POWER_DOMAIN_MFG] = {

@@ -980,13 +980,13 @@ static void hdmi_resolution_setting(int arg)
 			}
 		} else {
 			disp_config->dpi.clk_pol =
-			    hdmi_params->clk_pol;
+			    (enum LCM_POLARITY)hdmi_params->clk_pol;
 			disp_config->dpi.de_pol =
-			    hdmi_params->de_pol;
+			    (enum LCM_POLARITY)hdmi_params->de_pol;
 			disp_config->dpi.hsync_pol =
-			    hdmi_params->hsync_pol;
+			    (enum LCM_POLARITY)hdmi_params->hsync_pol;
 			disp_config->dpi.vsync_pol =
-			    hdmi_params->vsync_pol;
+			    (enum LCM_POLARITY)hdmi_params->vsync_pol;
 
 			disp_config->dpi.hsync_pulse_width =
 			    hdmi_params->hsync_pulse_width;

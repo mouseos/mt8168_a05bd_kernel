@@ -90,7 +90,6 @@ $(objtree)/dtboimg.cfg: FORCE
 
 else
 endif #CONFIG_BUILD_ARM*_DTB_OVERLAY_IMAGE
-dtbo_check:$(MAIN_DTB_NAMES) $(PROJ_DTB_NAMES)
-
+dtbo_check:
 
 endif #MTK_PLATFORM

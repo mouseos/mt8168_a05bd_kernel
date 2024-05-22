@@ -76,11 +76,3 @@ config MT6370_PMU_DSV
 	  Provide positive and negative voltage for LCD display bias.
 	  Say Y here to enable support for
 	  MT6370 dsv device.
-
-config LEDS_BRIGHTNESS_NORMALIZE
-	  tristate "normalize backlight brightness"
-	  default n
-	  ---help---
-	  Support brightness scaling of LED backlight, adapt different panel
-	  manufacturers to adajust the led brightness to reach same display effect.
-

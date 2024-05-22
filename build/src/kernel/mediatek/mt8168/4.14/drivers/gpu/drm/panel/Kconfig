@@ -86,6 +86,18 @@ config DRM_PANEL_SAMSUNG_S6E8AA0
 	select DRM_MIPI_DSI
 	select VIDEOMODE_HELPERS
 
+config DRM_PANEL_SHARP_LQ055T3SX02
+	tristate "SHARP LQ055T3SX02 FHD video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for SHARP LQ055T3SX02 FHD
+	  (1080x1920) DSI panel.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called panel-sharp-lq055t3sx02.
+
 config DRM_PANEL_SHARP_LQ101R1SX01
 	tristate "Sharp LQ101R1SX01 panel"
 	depends on OF

@@ -680,10 +680,11 @@ static int __init disp_init(void)
 {
 	int ret = 0;
 
+	pr_info("%s\n", __func__);
 	init_log_buffer();
 	DDPMSG("Register the disp driver\n");
 	if (platform_driver_register(&dispsys_of_driver)) {
-		DDPERR("failed to register disp driver\n");
+		DDPERR("%s failed to register disp driver\n", __func__);
 		/* platform_device_unregister(&disp_device); */
 		ret = -ENODEV;
 		return ret;
@@ -697,6 +698,7 @@ static void __exit disp_exit(void)
 	ASSERT(0);
 	/* disp-clk force on disable ??? */
 
+	pr_info("%s\n", __func__);
 	cdev_del(disp_cdev);
 	unregister_chrdev_region(disp_devno, 1);
 

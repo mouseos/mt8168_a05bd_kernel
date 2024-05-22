@@ -72,10 +72,6 @@ static DEFINE_SPINLOCK(g_CAM_CALLock);/* for SMP */
  */
 static struct i2c_client *g_pstI2Cclient;
 
-
-#define CAM_CAL_MAX_BUF_SIZE 65536/*For Safety, Can Be Adjusted*/
-
-
 /* add for linux-4.4 */
 #ifndef I2C_WR_FLAG
 #define I2C_WR_FLAG		(0x1000)
@@ -179,9 +175,9 @@ static int iWriteData(unsigned int ui4_offset,
 
 	CAM_CALDB("[BRCB032GWZ] %s\n", __func__);
 
-	if ((ui4_offset >= 0x2000) || (ui4_length >= 0x2000) || (ui4_offset + ui4_length >= 0x2000)) {
+	if (ui4_offset + ui4_length >= 0x2000) {
 		CAM_CALDB(
-		"[BRCB032GWZ] Write Error!! BRCB032GWZ not supprt address >= 0x2000!!, offset:%u, length:%u\n", ui4_offset, ui4_length);
+		"[BRCB032GWZ] Write Error!! BRCB032GWZ not supprt address >= 0x2000!!\n");
 		return -1;
 	}
 
@@ -239,9 +235,9 @@ static int iReadData(unsigned int  ui4_offset,
 	u8 *pBuff;
 	/* CAM_CALDB("[S24EEPORM] iReadData\n" ); */
 
-	if ((ui4_offset >= 0x2000) || (ui4_length >= 0x2000) || (ui4_offset + ui4_length >= 0x2000)) {
+	if (ui4_offset + ui4_length >= 0x2000) {
 		CAM_CALDB(
-		"[BRCB032GWZ] Read Error!! BRCB032GWZ not supprt address >= 0x2000!!, offset:%u, length:%u\n", ui4_offset, ui4_length);
+		"[BRCB032GWZ] Read Error!! BRCB032GWZ not supprt address >= 0x2000!!\n");
 		return -1;
 	}
 
@@ -349,14 +345,6 @@ static long CAM_CAL_Ioctl(
 	}
 
 	ptempbuf = (stCAM_CAL_INFO_STRUCT *)pBuff;
-
-	if ((ptempbuf->u4Length <= 0) ||
-		(ptempbuf->u4Length > CAM_CAL_MAX_BUF_SIZE)) {
-		kfree(pBuff);
-		PK_DBG("Buffer Length Error!\n");
-		return -EFAULT;
-	}
-
 	pWorkingBuff = kmalloc(ptempbuf->u4Length, GFP_KERNEL);
 	if (pWorkingBuff == NULL) {
 		kfree(pBuff);

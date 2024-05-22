@@ -227,10 +227,8 @@
 
 /* ========== CHG_CTRL13 0x1D ============ */
 #define MT6370_SHIFT_WDT_EN	7
-#define MT6370_SHIFT_HIGHER_OCP	2
 
 #define MT6370_MASK_WDT_EN	(1 << MT6370_SHIFT_WDT_EN)
-#define MT6370_MASK_HIGHER_OCP	(1 << MT6370_SHIFT_HIGHER_OCP)
 
 /* ========== CHG_CTRL14 0x1E ============ */
 #define MT6370_SHIFT_AICL_MEAS	7
@@ -319,9 +317,6 @@
 
 #define MT6370_MASK_DC_VBUSOV_EN	(1 << MT6370_SHIFT_DC_VBUSOV_EN)
 #define MT6370_MASK_DC_VBUSOV_LVL	0x7C
-
-/* ========== CHG_HIDDEN_CTRL22 0x45 ============ */
-#define MT6370_MASK_BATOVP_LVL (0x60)
 
 /* ========== CHG_STAT 0x4A ============ */
 #define MT6370_SHIFT_ADC_STAT	0

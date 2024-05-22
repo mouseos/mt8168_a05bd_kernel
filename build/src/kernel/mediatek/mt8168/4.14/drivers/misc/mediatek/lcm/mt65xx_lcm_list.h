@@ -225,16 +225,6 @@ extern struct LCM_DRIVER ili9806e_dsi_vdo_fwvga_drv;
 extern struct LCM_DRIVER otm1906a_fhd_dsi_cmd_auto_lcm_drv;
 extern struct LCM_DRIVER clap070wp03xg_lvds_lcm_drv;
 extern struct LCM_DRIVER jd9366_wxga_dsi_vdo_fiti_kd_lcm_drv;
-extern struct LCM_DRIVER jd9365d_wxga_dsi_vdo_fiti_inx_inx_onyx_lcm_drv;
-extern struct LCM_DRIVER jd9365d_wxga_dsi_vdo_fiti_inx_inx_onyx_proto_lcm_drv;
-extern struct LCM_DRIVER jd9365d_wxga_dsi_vdo_fiti_kd_hsd_onyx_lcm_drv;
-extern struct LCM_DRIVER jd9365d_wxga_dsi_vdo_fiti_kd_auo_onyx_lcm_drv;
-extern struct LCM_DRIVER jd9366ab_wxga_dsi_vdo_fiti_tg_boe_onyx_lcm_drv;
-extern struct LCM_DRIVER jd9365d_wxga_dsi_vdo_fiti_tah_tg_boe_onyx_lcm_drv;
-extern struct LCM_DRIVER ili9881c_wxga_dsi_vdo_ili_tg_inx_onyx_lcm_drv;
-extern struct LCM_DRIVER ili9881c_wxga_dsi_vdo_ili_kd_auo_onyx_lcm_drv;
-extern struct LCM_DRIVER ili9881c_wxga_dsi_vdo_ili_kd_hsd_onyx_lcm_drv;
-extern struct LCM_DRIVER sc7705_wxga_dsi_vdo_sitr_kd_boe_onyx_lcm_drv;
 extern struct LCM_DRIVER nt35523_wxga_dsi_vdo_boe_lcm_drv;
 extern struct LCM_DRIVER otm1906b_fhd_dsi_cmd_jdi_tps65132_lcm_drv;
 extern struct LCM_DRIVER otm1906b_fhd_dsi_cmd_jdi_tps65132_mt6797_lcm_drv;
@@ -301,7 +291,8 @@ extern struct LCM_DRIVER ili9881c_hdp_dsi_vdo_ilitek_rt5081_lcm_drv_ebbg;
 extern struct LCM_DRIVER hx8394f_hd720_dsi_vdo_tianma_lcm_drv;
 extern struct LCM_DRIVER nt36672_fhdp_dsi_vdo_auo_lcm_drv;
 extern struct LCM_DRIVER nt36672_fhdp_dsi_vdo_auo_laneswap_lcm_drv;
-extern struct LCM_DRIVER jd936x_wxga_dsi_vdo_peregrine_lcm_drv;
+extern struct LCM_DRIVER kd101n92_45ni_a003_dsi_lcm_drv;
+
 #ifdef BUILD_LK
 extern void mdelay(unsigned long msec);
 #endif

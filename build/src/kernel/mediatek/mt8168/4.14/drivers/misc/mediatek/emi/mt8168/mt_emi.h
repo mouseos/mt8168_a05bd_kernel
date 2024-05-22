@@ -16,7 +16,7 @@
 
 /* submodule control */
 #define ENABLE_BWL	1
-#define ENABLE_MPU	0
+#define ENABLE_MPU	1
 #define ENABLE_ELM	0
 #define ENABLE_MBW	0
 #define ENABLE_BWG	0

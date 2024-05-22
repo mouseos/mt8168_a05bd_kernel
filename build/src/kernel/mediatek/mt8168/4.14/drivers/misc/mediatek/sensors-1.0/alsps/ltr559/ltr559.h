@@ -39,11 +39,6 @@
 
 #define LTR559_INTERRUPT_PERSIST 0x9E
 
-#define ALS_MODE_MASK 0x1
-#define ALS_MODE_SHIFT 0
-#define PS_MODE_MASK 0x1
-#define PS_MODE_SHIFT 1
-
 /* 559's Read Only Registers */
 #define LTR559_ALS_DATA_CH1_0	0x88
 #define LTR559_ALS_DATA_CH1_1	0x89
@@ -80,17 +75,29 @@
 #define PS_RANGE32	4
 #define PS_RANGE64 	8
 
-/*  */
-#define LTR559_DEVICE_ID	0x05
+/*
+ * Magic Number
+ * ============
+ * Refer to file ioctl-number.txt for allocation
+ */
+#define LTR559_IOCTL_MAGIC      'c'
+
+/* IOCTLs for ltr559 device */
+#define LTR559_IOCTL_PS_ENABLE		_IOW(LTR559_IOCTL_MAGIC, 0, char *)
+#define LTR559_IOCTL_ALS_ENABLE		_IOW(LTR559_IOCTL_MAGIC, 1, char *)
+#define LTR559_IOCTL_READ_PS_DATA	_IOR(LTR559_IOCTL_MAGIC, 2, char *)
+#define LTR559_IOCTL_READ_PS_INT	_IOR(LTR559_IOCTL_MAGIC, 3, char *)
+#define LTR559_IOCTL_READ_ALS_DATA	_IOR(LTR559_IOCTL_MAGIC, 4, char *)
+#define LTR559_IOCTL_READ_ALS_INT	_IOR(LTR559_IOCTL_MAGIC, 5, char *)
 
 /* Power On response time in ms */
 #define PON_DELAY	10
 #define WAKEUP_DELAY	10
 
-#define ltr559_SUCCESS					0
-#define ltr559_ERR_I2C					-1
-#define ltr559_ERR_STATUS				-3
-#define ltr559_ERR_SETUP_FAILURE			-4
+#define ltr559_SUCCESS						0
+#define ltr559_ERR_I2C						-1
+#define ltr559_ERR_STATUS					-3
+#define ltr559_ERR_SETUP_FAILURE				-4
 #define ltr559_ERR_GETGSENSORDATA			-5
 #define ltr559_ERR_IDENTIFICATION			-6
 

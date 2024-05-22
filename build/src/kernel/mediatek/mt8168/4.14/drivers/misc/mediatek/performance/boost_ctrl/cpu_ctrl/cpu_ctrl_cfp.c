@@ -90,10 +90,8 @@ static void set_cfp_ppm(struct ppm_limit_data *desired_freq, int headroom_opp)
 	policy = kcalloc(perfmgr_clusters, sizeof(struct cpufreq_policy *),
 			GFP_KERNEL);
 
-	if (!policy) {
-		perfmgr_trace_printk("cpu_ctrl_cfp", "return -ENOMEM 1\n");
+	if (!policy)
 		return;
-	}
 
 	cfp_lockprove(__func__);
 	for_each_perfmgr_clusters(clu_idx) {
@@ -120,7 +118,6 @@ static void set_cfp_ppm(struct ppm_limit_data *desired_freq, int headroom_opp)
 #ifdef CONFIG_TRACING
 	perfmgr_trace_count(cc_is_ceiled, "cfp_ceiled");
 #endif
-
 		arch_get_cluster_cpus(&cpus_mask, clu_idx);
 		policy[clu_idx] = cpufreq_cpu_get(cpumask_first(&cpus_mask));
 
@@ -319,23 +316,6 @@ static int perfmgr_cfp_curr_stat_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-static int perfmgr_cfp_freq_tbl_proc_show(struct seq_file *m, void *v)
-{
-	int clu_idx, opp_idx;
-	cfp_lock(__func__);
-	if (m) {
-		for_each_perfmgr_clusters(clu_idx) {
-			for (opp_idx = 0; opp_idx < MAX_NR_FREQ; opp_idx++) {
-				seq_printf(m, "freq_tbl[%d][%d]: %d\n",
-					clu_idx, opp_idx,
-					freq_tbl[clu_idx][opp_idx]);
-			}
-		}
-	}
-	cfp_unlock(__func__);
-	return 0;
-}
-
 #define SET_CFP(name, lb, ub) \
 static int set_cfp_##name(int val) \
 { \
@@ -430,7 +410,6 @@ CFP_SHOW(down_time);
 CFP_SHOW(up_loading);
 CFP_SHOW(down_loading);
 
-PROC_FOPS_RO(cfp_freq_tbl);
 PROC_FOPS_RW(cfp_enable);
 PROC_FOPS_RW(cfp_polling_ms);
 PROC_FOPS_RW(cfp_up_opp);
@@ -464,7 +443,6 @@ int cpu_ctrl_cfp_init(struct proc_dir_entry *parent)
 		PROC_ENTRY(cfp_up_loading),
 		PROC_ENTRY(cfp_down_loading),
 		PROC_ENTRY(cfp_curr_stat),
-		PROC_ENTRY(cfp_freq_tbl),
 	};
 
 	for (i = 0; i < ARRAY_SIZE(entries); i++) {
@@ -516,8 +494,6 @@ int cpu_ctrl_cfp_init(struct proc_dir_entry *parent)
 					mt_cpufreq_get_freq_by_idx(clu_idx,
 						opp_idx);
 			}
-			pr_debug("freq_tbl[%d][%d]: %d",
-				clu_idx, opp_idx, freq_tbl[clu_idx][opp_idx]);
 		}
 	}
 

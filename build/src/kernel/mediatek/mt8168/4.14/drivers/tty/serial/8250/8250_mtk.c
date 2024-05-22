@@ -24,6 +24,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/serial_8250.h>
 #include <linux/serial_reg.h>
 #include <linux/tty.h>
@@ -833,10 +834,14 @@ static int __maybe_unused mtk8250_suspend(struct device *dev)
 {
 	struct mtk8250_data *data = dev_get_drvdata(dev);
 	struct uart_8250_port *up = serial8250_get_port(data->line);
+	bool console = uart_console(&up->port);
 
-	if (uart_console(&up->port) == 1)
+	if (console == 1)
 		mtk8250_save_dev(dev);
 	serial8250_suspend_port(data->line);
+
+	if (!console || (console && console_suspend_enabled))
+		pinctrl_pm_select_sleep_state(dev);
 
 	return 0;
 }
@@ -844,6 +849,11 @@ static int __maybe_unused mtk8250_suspend(struct device *dev)
 static int __maybe_unused mtk8250_resume(struct device *dev)
 {
 	struct mtk8250_data *data = dev_get_drvdata(dev);
+	struct uart_8250_port *up = serial8250_get_port(data->line);
+	bool console = uart_console(&up->port);
+
+	if (!console || (console && console_suspend_enabled))
+		pinctrl_pm_select_default_state(dev);
 
 	serial8250_resume_port(data->line);
 

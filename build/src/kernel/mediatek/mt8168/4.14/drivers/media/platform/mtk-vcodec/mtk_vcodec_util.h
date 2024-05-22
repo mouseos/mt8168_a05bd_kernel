@@ -34,9 +34,11 @@ struct mtk_vcodec_mem {
 };
 
 /**
- * enum cache_flags  - decoder different cache operation types
+ * enum flags  - decoder different operation types
  * @NO_CAHCE_FLUSH	: no need to proceed cache flush
  * @NO_CAHCE_INVALIDATE	: no need to proceed cache invalidate
+ * @CROP_CHANGED	: frame buffer crop changed
+ * @REF_FREED	: frame buffer is reference freed
  */
 enum mtk_vcodec_flags {
 	NO_CAHCE_CLEAN = 1,

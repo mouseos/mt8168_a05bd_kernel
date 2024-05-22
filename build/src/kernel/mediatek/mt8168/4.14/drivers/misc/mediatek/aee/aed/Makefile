@@ -14,6 +14,5 @@
 subdir-ccflags-y += -Idrivers/misc/mediatek/aee/mrdump/
 
 obj-$(CONFIG_MTK_AEE_AED) += aed.o
-obj-$(CONFIG_MTK_AEE_UT) += aed-debug.o
-aed-y := aed-main.o
+aed-y := aed-main.o aed-debug.o
 aed-y += monitor_hang.o

@@ -9,9 +9,7 @@
 #include <linux/cpufreq.h>
 #include "mtk_power_throttle.h"
 /* #include "mt_hotplug_strategy.h" */
-#ifdef CONFIG_THERMAL
 #include "mach/mtk_thermal.h"
-#endif
 
 /* temp variable for thermal debug */
 int __attribute__ ((weak)) tscpu_debug_log;
@@ -288,33 +286,14 @@ static int mtk_cpufreq_thermal_notifier(struct notifier_block *nb,
 	if (event != CPUFREQ_ADJUST)
 		return NOTIFY_DONE;
 
-	/*
-	 * policy->max is the maximum allowed frequency defined by user
-	 * and clipped_freq is the maximum that thermal constraints
-	 * allow.
-	 *
-	 * If clipped_freq is lower than policy->max, then we need to
-	 * readjust policy->max.
-	 *
-	 * But, if clipped_freq is greater than policy->max, we don't
-	 * need to do anything.
-	 */
-
 	if (tscpu_debug_log  & 0x1)
 		pr_err("%s clipped_freq = %ld, policy->max=%d, policy->min=%d\n",
 				__func__, clipped_freq,
 				policy->max, policy->min);
 
-	/* Since thermal throttling could hogplug CPU, less cpufreq might cause
-	 * a performance issue.
-	 * Only DVFS TLP feature enable, we can keep the max freq by CPUFREQ
-	 * GOVERNOR or Pref service.
-	 */
-	if (policy->max > clipped_freq) {
-		/* SVS using OPP API to the fixed frequency */
-
+	if (policy->max != clipped_freq)
 		cpufreq_verify_within_limits(policy, 0, clipped_freq);
-	}
+
 
 	return NOTIFY_OK;
 }

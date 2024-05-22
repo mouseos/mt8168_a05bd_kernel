@@ -32,6 +32,16 @@ config SND_SOC_MT2701_WM8960
 	  Select Y if you have such device.
 	  If unsure select "N".
 
+config SND_SOC_MT8133_M1
+	tristate "ASoC Audio driver for MT8133 M1 Board"
+	depends on SND_SOC_MT8168
+	help
+	  This adds support for ASoC machine driver for Mediatek MT8133
+	  that used MT6357 codec.
+	  Select Y if you have such device.
+	  If unsure select "N".
+	  Ex: MT8133
+
 config SND_SOC_MT8168
 	tristate "ASoC support for Mediatek MT8168 chip"
 	depends on ARCH_MEDIATEK
@@ -60,28 +70,8 @@ config SND_SOC_MT8168_FPGA
 	  If unsure select "N".
 	  Ex: MT8168
 
-config SND_SOC_MT8168_ONYX
-	tristate "ASoC Audio driver for Onyx Board"
-	depends on SND_SOC_MT8168
-	help
-	  This adds support for ASoC machine driver for Mediatek MT8168
-	  that used MT6357 codec.
-	  Select Y if you have such device.
-	  If unsure select "N".
-	  Ex: MT8168
-
 config SND_SOC_MT8168_P1
 	tristate "ASoC Audio driver for MT8168 P1 Board"
-	depends on SND_SOC_MT8168
-	help
-	  This adds support for ASoC machine driver for Mediatek MT8168
-	  that used MT6357 codec.
-	  Select Y if you have such device.
-	  If unsure select "N".
-	  Ex: MT8168
-
-config SND_SOC_MT8168_PEREGRINE
-	tristate "ASoC Audio driver for Peregrine Board"
 	depends on SND_SOC_MT8168
 	help
 	  This adds support for ASoC machine driver for Mediatek MT8168

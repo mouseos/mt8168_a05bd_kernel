@@ -173,11 +173,6 @@ struct mmc_host_ops {
 	 */
 	int	(*multi_io_quirk)(struct mmc_card *card,
 				  unsigned int direction, int blk_size);
-
-#if defined(CONFIG_AMAZON_METRICS_LOG) || defined(CONFIG_AMAZON_MINERVA_METRICS_LOG)
-	/* Optional callback to support log card detection irq */
-	void (*cd_irq)(struct mmc_host *host);
-#endif
 };
 
 struct mmc_cqe_ops {
@@ -451,15 +446,6 @@ struct mmc_host {
 #define MMC_CAP2_CQE_DCMD	(1 << 24)	/* CQE can issue a direct command */
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
-
-#ifdef CONFIG_AMAZON_METRICS_LOG
-	struct delayed_work	metrics_delay_work; /* delayed metrics output */
-	struct delayed_work metrics_timeout_work; /* delayed metrics output */
-	atomic64_t data_count; /* total send data count */
-	atomic64_t data_timeout_count; /* data timeout count */
-	struct mutex cid_mutex; /*mutex for CID RW */
-	char cid[40]; /* raw card CID */
-#endif /* CONFIG_AMAZON_METRICS_LOG */
 
 	/* host specific block data */
 	unsigned int		max_seg_size;	/* see blk_queue_max_segment_size */

@@ -50,6 +50,7 @@ enum {
 	MT8168_AFE_IO_PCM1,
 	MT8168_AFE_IO_VIRTUAL_DL_SRC,
 	MT8168_AFE_IO_VIRTUAL_TDM_OUT_SRC,
+	MT8168_AFE_IO_VIRTUAL_FM,
 	MT8168_AFE_IO_DMIC,
 	MT8168_AFE_IO_INT_ADDA,
 	MT8168_AFE_IO_GASRC1,
@@ -194,6 +195,25 @@ enum {
 };
 
 enum {
+	FS_8000HZ  = 0, /* 0000b */
+	FS_11025HZ = 1, /* 0001b */
+	FS_12000HZ = 2, /* 0010b */
+	FS_384000HZ = 3, /* 0011b */
+	FS_16000HZ = 4, /* 0100b */
+	FS_22050HZ = 5, /* 0101b */
+	FS_24000HZ = 6, /* 0110b */
+	FS_130000HZ = 7, /* 0111b */
+	FS_32000HZ = 8, /* 1000b */
+	FS_44100HZ = 9, /* 1001b */
+	FS_48000HZ = 10, /* 1010b */
+	FS_88200HZ = 11, /* 1011b */
+	FS_96000HZ = 12, /* 1100b */
+	FS_176400HZ = 13, /* 1101b */
+	FS_192000HZ = 14, /* 1110b */
+	FS_260000HZ = 15, /* 1111b */
+};
+
+enum {
 	MT8168_AFE_DEBUGFS_AFE,
 	MT8168_AFE_DEBUGFS_MEMIF,
 	MT8168_AFE_DEBUGFS_IRQ,
@@ -279,15 +299,14 @@ struct mt8168_cm_ctrl_reg {
 struct mt8168_control_data {
 	bool bypass_cm1;
 	bool bypass_cm2;
-	bool dl_p_state;
 	unsigned int loopback_type;
 };
 
 enum dmic_input_mode {
-	Dmic_3p25m = 0,
-	Dmic_1p625m = 1,
-	Dmic_812p5k = 2,
-	Dmic_406p25k = 3,
+	DMIC_MODE_3P25M = 0,
+	DMIC_MODE_1P625M,
+	DMIC_MODE_812P5K,
+	DMIC_MODE_406P25K,
 };
 
 struct mt8168_dmic_data {

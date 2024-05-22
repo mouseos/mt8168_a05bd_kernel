@@ -54,9 +54,9 @@ enum ION_CACHE_SYNC_TYPE {
 	ION_CACHE_CLEAN_BY_RANGE,
 	ION_CACHE_INVALID_BY_RANGE,
 	ION_CACHE_FLUSH_BY_RANGE,
-	ION_CACHE_CLEAN_BY_RANGE_USE_VA, /* NOT TO USE */
-	ION_CACHE_INVALID_BY_RANGE_USE_VA,/* NOT TO USE */
-	ION_CACHE_FLUSH_BY_RANGE_USE_VA,/* NOT TO USE */
+	ION_CACHE_CLEAN_BY_RANGE_USE_VA,
+	ION_CACHE_INVALID_BY_RANGE_USE_VA,
+	ION_CACHE_FLUSH_BY_RANGE_USE_VA,
 	ION_CACHE_CLEAN_ALL,
 	ION_CACHE_INVALID_ALL,
 	ION_CACHE_FLUSH_ALL
@@ -253,6 +253,12 @@ typedef int (ion_mm_buf_destroy_callback_t)(struct ion_buffer *buffer,
 					    unsigned int phy_addr);
 int ion_mm_heap_register_buf_destroy_cb(struct ion_buffer *buffer,
 					ion_mm_buf_destroy_callback_t *fn);
+
+int ion_cache_sync_flush_all(int fd);
+int ion_dma_map_area(int fd, int handle, int dir);
+int ion_dma_unmap_area(int fd, int handle, int dir);
+void ion_dma_map_area_va(void *start, size_t size, enum ION_DMA_DIR dir);
+void ion_dma_unmap_area_va(void *start, size_t size, enum ION_DMA_DIR dir);
 
 struct ion_heap *ion_mm_heap_create(struct ion_platform_heap *unused);
 void ion_mm_heap_destroy(struct ion_heap *heap);

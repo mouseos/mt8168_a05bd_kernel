@@ -207,7 +207,6 @@ unsigned int mt6357_upmu_get_swcid(
 		(PMIC_SWCID_SHIFT)
 		);
 
-	val = val >> 8;
 	return val;
 }
 

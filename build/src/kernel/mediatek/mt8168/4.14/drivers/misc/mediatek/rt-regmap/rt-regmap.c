@@ -373,11 +373,6 @@ static int rt_cache_block_write(struct rt_regmap_device *rd, u32 reg,
 					rm->addr+rio.offset,
 					size,
 					&wdata[count]);
-			if (ret < 0) {
-				dev_notice(&rd->dev,
-					   "rd->rt_block_write fail\n");
-				goto ERR;
-			}
 			count += size;
 		} else {
 			blk_index = (rd->props.rt_regmap_mode &
@@ -409,7 +404,7 @@ finished:
 	if (rd->props.io_log_en) {
 		j = 0;
 		for (i = 0; i < count; i++)
-			j += snprintf(wri_data + j, sizeof(wri_data) - j,
+			j += snprintf(wri_data + j, PAGE_SIZE,
 			"%02x,", wdata[i]);
 		pr_info("RT_REGMAP [WRITE] reg0x%04x  [Data] 0x%s\n",
 							reg, wri_data);
@@ -481,7 +476,7 @@ finished:
 	if (rd->props.io_log_en) {
 		j = 0;
 		for (i = 0; i < count; i++)
-			j += snprintf(wri_data + j, sizeof(wri_data) - j,
+			j += snprintf(wri_data + j, PAGE_SIZE,
 			"%02x,", wdata[i]);
 		pr_info("RT_REGMAP [WRITE] reg0x%04x  [Data] 0x%s\n",
 								reg, wri_data);
@@ -792,7 +787,7 @@ static int _rt_asyn_regmap_reg_write(struct rt_regmap_device *rd,
 {
 	const rt_register_map_t *rm = rd->props.rm;
 	struct reg_index_offset rio;
-	int ret, tmp_data = 0;
+	int ret, tmp_data;
 
 	rio = find_register_index(rd, rrd->reg);
 	if (rio.index < 0 || rio.offset != 0) {
@@ -1492,7 +1487,7 @@ static ssize_t general_write(struct file *file, const char __user *ubuf,
 	struct rt_debug_st *st = file->private_data;
 	struct rt_regmap_device *rd = st->info;
 	struct reg_index_offset rio;
-	long int param[5] = {0, 0, 0, 0, 0};
+	long int param[5];
 	unsigned char *reg_data;
 	int rc, size = 0;
 	char lbuf[128];
@@ -1888,8 +1883,7 @@ static void rt_create_every_debug(struct rt_regmap_device *rd,
 		rd->props.register_num*sizeof(struct rt_debug_st *),
 								GFP_KERNEL);
 	for (i = 0; i < rd->props.register_num; i++) {
-		snprintf(buf, sizeof(buf),
-			 "reg0x%02x", (rd->props.rm[i])->addr);
+		snprintf(buf, PAGE_SIZE, "reg0x%02x", (rd->props.rm[i])->addr);
 		rd->rt_reg_file[i] = devm_kzalloc(&rd->dev,
 						  sizeof(*rd->rt_reg_file[i]),
 						  GFP_KERNEL);

@@ -257,6 +257,4 @@ extern int is_ext_swchr_exist(void);
 /*----- Smart Reset -----*/
 extern void pmic_enable_smart_reset(unsigned char smart_en,
 				    unsigned char smart_sdn_en);
-
-extern void pmic_charger_auto_on(bool bEn);
 #endif				/* _MT_PMIC_COMMON_H_ */

@@ -98,14 +98,7 @@
 #define P2C_RG_UART_EN			BIT(16)
 #define P2C_RG_VBUSVALID		BIT(5)
 #define P2C_RG_SESSEND			BIT(4)
-#define P2C_RG_BVALID			BIT(3)
 #define P2C_RG_AVALID			BIT(2)
-#define P2C_RG_IDDIG			BIT(1)
-#define P2C_RG_FORCE_VBUSVALID		BIT(13)
-#define P2C_RG_FORCE_SESSEND		BIT(12)
-#define P2C_RG_FORCE_BVALID		BIT(11)
-#define P2C_RG_FORCE_AVALID		BIT(10)
-#define P2C_RG_FORCE_IDDIG		BIT(9)
 
 #define U3P_U3_CHIP_GPIO_CTLD		0x0c
 #define P3C_REG_IP_SW_RST		BIT(31)
@@ -514,7 +507,6 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 	writel(tmp, com + U3P_U2PHYDTM0);
 
 	/* OTG Enable */
-	#ifndef U2PHY_FORCE_DEVICE_MODE
 	tmp = readl(com + U3P_USBPHYACR6);
 	tmp |= PA6_RG_U2_OTG_VBUSCMP_EN;
 	writel(tmp, com + U3P_USBPHYACR6);
@@ -523,18 +515,6 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 	tmp |= P2C_RG_VBUSVALID | P2C_RG_AVALID;
 	tmp &= ~P2C_RG_SESSEND;
 	writel(tmp, com + U3P_U2PHYDTM1);
-	#else
-	tmp = readl(com + U3P_USBPHYACR6);
-	tmp &= ~PA6_RG_U2_OTG_VBUSCMP_EN;
-	writel(tmp, com + U3P_USBPHYACR6);
-
-	tmp = readl(com + U3P_U2PHYDTM1);
-	tmp |= P2C_RG_VBUSVALID | P2C_RG_BVALID | P2C_RG_AVALID | P2C_RG_IDDIG;
-	tmp |= P2C_RG_FORCE_VBUSVALID | P2C_RG_FORCE_BVALID;
-	tmp |= P2C_RG_FORCE_AVALID | P2C_RG_FORCE_IDDIG | P2C_RG_FORCE_SESSEND;
-	tmp &= ~P2C_RG_SESSEND;
-	writel(tmp, com + U3P_U2PHYDTM1);
-	#endif
 
 	if (tphy->pdata->avoid_rx_sen_degradation && index) {
 		tmp = readl(com + U3D_U2PHYDCR0);
@@ -837,7 +817,7 @@ static int mtk_phy_init(struct phy *phy)
 	ret = clk_prepare_enable(instance->ref_clk);
 	if (ret) {
 		dev_err(tphy->dev, "failed to enable ref_clk\n");
-		goto fail1;
+		return ret;
 	}
 
 	switch (instance->type) {
@@ -855,19 +835,13 @@ static int mtk_phy_init(struct phy *phy)
 		break;
 	default:
 		dev_err(tphy->dev, "incompatible PHY type\n");
-		goto fail2;
+		return -EINVAL;
 	}
 
 	clk_disable_unprepare(instance->ref_clk);
 	clk_disable_unprepare(tphy->u3phya_ref);
 
 	return 0;
-
-fail2:
-	clk_disable_unprepare(instance->ref_clk);
-fail1:
-	clk_disable_unprepare(tphy->u3phya_ref);
-	return -EINVAL;
 }
 
 static int mtk_phy_power_on(struct phy *phy)
@@ -885,7 +859,7 @@ static int mtk_phy_power_on(struct phy *phy)
 	ret = clk_prepare_enable(instance->ref_clk);
 	if (ret) {
 		dev_err(tphy->dev, "failed to enable ref_clk\n");
-		goto fail;
+		return ret;
 	}
 
 	if (instance->type == PHY_TYPE_USB2) {
@@ -896,10 +870,6 @@ static int mtk_phy_power_on(struct phy *phy)
 	}
 
 	return 0;
-
-fail:
-	clk_disable_unprepare(tphy->u3phya_ref);
-	return ret;
 }
 
 static int mtk_phy_power_off(struct phy *phy)
@@ -933,7 +903,7 @@ static int mtk_phy_exit(struct phy *phy)
 	ret = clk_prepare_enable(instance->ref_clk);
 	if (ret) {
 		dev_err(tphy->dev, "failed to enable ref_clk\n");
-		goto fail;
+		return ret;
 	}
 
 	if (instance->type == PHY_TYPE_USB2)
@@ -943,10 +913,6 @@ static int mtk_phy_exit(struct phy *phy)
 	clk_disable_unprepare(tphy->u3phya_ref);
 
 	return 0;
-
-fail:
-	clk_disable_unprepare(tphy->u3phya_ref);
-	return ret;
 }
 
 static struct phy *mtk_phy_xlate(struct device *dev,

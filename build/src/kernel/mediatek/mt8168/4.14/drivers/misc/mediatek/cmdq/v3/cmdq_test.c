@@ -3364,7 +3364,7 @@ static void testcase_poll_monitor_delay_continue(struct work_struct *workItem)
 
 static s32 testcase_poll_monitor_callback(unsigned long data)
 {
-	u32 pollTime = 0;
+	u32 pollTime;
 
 	if (!gPollMonitor.status)
 		return 0;
@@ -3706,10 +3706,10 @@ static void testcase_specific_bus_MMSYS(void)
 	u32 i;
 	const u32 loop = 1000;
 	const u32 pattern = (1 << 0) | (1 << 2) | (1 << 16);
-	u32 mmsys_register = 0;
+	u32 mmsys_register;
 	struct cmdqRecStruct *handle = NULL;
-	cmdqBackupSlotHandle slot_handle = 0;
-	u32 start_time = 0, end_time = 0, duration_time = 0;
+	cmdqBackupSlotHandle slot_handle;
+	u32 start_time, end_time, duration_time;
 
 	CMDQ_LOG("%s\n", __func__);
 
@@ -4348,9 +4348,9 @@ static void testcase_jump_c(void)
 	const u32 max_rows = 10;
 	const u32 max_cols = 12;
 	u32 row_in_value = 0, col_in_value = 0;
-	u32 test_result = 0, expect_result = 0, expect_temp_sum = 0;
-	CMDQ_VARIABLE cmdq_row = 0, cmdq_col = 0, cmdq_temp_sum = 0, cmdq_result = 0;
-	cmdqBackupSlotHandle slot_handle = 0;
+	u32 test_result, expect_result, expect_temp_sum;
+	CMDQ_VARIABLE cmdq_row, cmdq_col, cmdq_temp_sum, cmdq_result;
+	cmdqBackupSlotHandle slot_handle;
 
 	CMDQ_LOG("%s\n", __func__);
 
@@ -4439,9 +4439,9 @@ static void testcase_jump_c_do_while(void)
 	const u32 max_rows = 10;
 	const u32 max_cols = 12;
 	u32 row_in_value = 0, col_in_value = 0;
-	u32 test_result = 0, expect_result = 0, expect_temp_sum = 0;
-	CMDQ_VARIABLE cmdq_row = 0, cmdq_col = 0, cmdq_temp_sum = 0, cmdq_result = 0;
-	cmdqBackupSlotHandle slot_handle = 0;
+	u32 test_result, expect_result, expect_temp_sum;
+	CMDQ_VARIABLE cmdq_row, cmdq_col, cmdq_temp_sum, cmdq_result;
+	cmdqBackupSlotHandle slot_handle;
 
 	CMDQ_LOG("%s\n", __func__);
 
@@ -7179,7 +7179,7 @@ static void testmbox_write(unsigned long dummy_va, unsigned long dummy_pa,
 	const u32 expect_result = pattern & mask;
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	u32 value = 0;
 
 	CMDQ_LOG("%s va:0x%lx pa:0x%lx mask:0x%08x\n",
@@ -7285,7 +7285,7 @@ static void testmbox_dma_access(void)
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL, *pkt2 = NULL;
+	struct cmdq_pkt *pkt, *pkt2;
 	const u32 pattern = 0xabcdabcd;
 	const u32 pattern2 = 0xaabbccdd;
 	const u32 pat_default = 0xdeaddead;
@@ -7467,7 +7467,7 @@ static void testmbox_large_command(void)
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	u32 data, i;
 
 	CMDQ_LOG("%s\n", __func__);
@@ -7499,7 +7499,7 @@ static void testmbox_poll_run(u32 poll_value, u32 poll_mask,
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	struct cmdq_flush_completion cmplt = {0};
 	u32 value = 0, dst_reg_pa;
 	unsigned long dummy_va;
@@ -7558,7 +7558,7 @@ static void testmbox_verify_cpr(void)
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	u32 dummy_pa;
 	unsigned long dummy_va;
 	const u32 pattern = 0xdeadabcd;
@@ -7617,7 +7617,7 @@ static void testmbox_verify_cpr(void)
 static void testmbox_dump_err(void)
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	struct cmdq_flush_completion cmplt = {0};
 	u32 ret;
 
@@ -7651,7 +7651,7 @@ static void testmbox_poll_timeout_run(u32 poll_value, u32 poll_mask,
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	struct cmdq_pkt_buffer *buf;
 	struct cmdq_flush_completion cmplt = {0};
 	u32 value = 0, dst_reg_pa, cost;
@@ -7756,7 +7756,7 @@ static void testmbox_gpr_timer(void)
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
 	struct cmdq_thread *thread = (struct cmdq_thread *)clt->chan->con_priv;
 	const u32 timeout_en = thread->gce_pa + CMDQ_TPR_TIMEOUT_EN;
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	struct cmdq_pkt_buffer *buf;
 	const u16 reg_gpr = CMDQ_DATA_REG_DEBUG;
 	const u32 tpr_en = 1 << reg_gpr;
@@ -7830,7 +7830,7 @@ static void testmbox_sleep(void)
 {
 	struct cmdq_client *clt = cmdq_helper_mbox_client(TESTMBOX_CLT_IDX);
 	struct cmdq_base *clt_base = cmdq_helper_mbox_base();
-	struct cmdq_pkt *pkt = NULL;
+	struct cmdq_pkt *pkt;
 	struct cmdq_pkt_buffer *buf;
 	u32 cost;
 	dma_addr_t out_pa;

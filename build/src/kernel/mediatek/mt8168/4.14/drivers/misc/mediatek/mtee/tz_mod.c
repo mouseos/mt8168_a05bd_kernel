@@ -1012,9 +1012,6 @@ static long __tz_reg_sharedmem(struct file *file, unsigned long arg,
 	char *tag = NULL;
 
 	/* handle tag for debugging purpose */
-	if (cparam->tag_size >= (0xFFFFFFFF))
-		return -EINVAL;
-
 	if (cparam->tag != 0 && cparam->tag_size != 0) {
 		tag = kmalloc(cparam->tag_size+1, GFP_KERNEL);
 		if (tag == NULL)

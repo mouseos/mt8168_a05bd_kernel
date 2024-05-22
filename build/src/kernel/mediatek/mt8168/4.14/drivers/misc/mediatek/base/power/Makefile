@@ -27,6 +27,7 @@ obj-$(CONFIG_MACH_MT8168) += $(subst ",,$(CONFIG_MTK_PLATFORM))/
 obj-$(CONFIG_MACH_MT6771) += clkbuf_v1/
 ifeq ($(CONFIG_MACH_MT8168), y)
 obj-$(CONFIG_MTK_PMIC_CHIP_MT6357) += clkbuf_v1/
+obj-$(CONFIG_MTK_PMIC_CHIP_MT6390) += clkbuf_v1/
 endif
 endif
 ifeq ($(CONFIG_MTK_CM_MGR), y)

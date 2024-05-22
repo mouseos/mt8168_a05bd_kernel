@@ -365,24 +365,7 @@ static void mmc_queue_setup_discard(struct request_queue *q,
 
 	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, q);
 	blk_queue_max_discard_sectors(q, max_discard);
-
-	/*
-	 * Some eMMC could report HC_ERASE_GRP_SIZE with a high value (e.g. 4M),
-	 * but it doesn't choose it via ERASE_GROUP_DEF, this cause mismatch
-	 * between driver and EXT_CSD of eMMC, driver set wrong pref_erase to
-	 * discard_granularity. Check erase_group_def=0x1 if pref_erase is more
-	 * than erase_size and choose pref_erase, otherwise choose erase_size.
-	 */
-	if (card->pref_erase > card->erase_size
-		&& !(card->ext_csd.erase_group_def & 0x1)) {
-		q->limits.discard_granularity = card->erase_size << 9;
-		pr_info("%s: pref_erase:%d erase_size:%d erase_group_def: %d\n",
-			__func__, card->pref_erase, card->erase_size,
-			card->ext_csd.erase_group_def);
-	} else {
-		q->limits.discard_granularity = card->pref_erase << 9;
-	}
-
+	q->limits.discard_granularity = card->pref_erase << 9;
 	/* granularity must not be greater than max. discard */
 	if (card->pref_erase > max_discard)
 		q->limits.discard_granularity = 0;
@@ -660,9 +643,6 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	blk_start_queue(q);
 	spin_unlock_irqrestore(q->queue_lock, flags);
 
-	if (likely(!blk_queue_dead(q)))
-		blk_cleanup_queue(q);
-
 	mq->card = NULL;
 }
 EXPORT_SYMBOL(mmc_cleanup_queue);
@@ -744,7 +724,7 @@ int mmc_cmdq_init(struct mmc_queue *mq, struct mmc_card *card)
 	init_completion(&mq->cmdq_pending_req_done);
 
 	blk_queue_rq_timed_out(mq->queue, mmc_cmdq_rq_timed_out);
-	blk_queue_rq_timeout(mq->queue, 30 * HZ);
+	blk_queue_rq_timeout(mq->queue, 120 * HZ);
 	card->cqe_init = true;
 
 	goto out;

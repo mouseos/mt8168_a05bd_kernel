@@ -126,11 +126,6 @@ s32 cmdq_task_secure_enable_dapc(struct cmdqRecStruct *handle,
 s32 cmdqRecSecureEnableDAPC(struct cmdqRecStruct *handle,
 	const u64 engineFlag);
 
-	int32_t cmdq_task_secure_disable_dapc(struct cmdqRecStruct *handle,
-		const uint64_t engineFlag);
-	int32_t cmdqRecSecureDisableDAPC(struct cmdqRecStruct *handle,
-		const uint64_t engineFlag);
-
 /* Add flag for M4U security ports
  * Parameter:
  * Note:
@@ -141,13 +136,6 @@ s32 cmdq_task_secure_enable_port_security(struct cmdqRecStruct *handle,
 	const u64 engineFlag);
 s32 cmdqRecSecureEnablePortSecurity(struct cmdqRecStruct *handle,
 	const u64 engineFlag);
-
-	int32_t cmdq_task_secure_disable_port_security(
-		struct cmdqRecStruct *handle,
-		const uint64_t engineFlag);
-	int32_t cmdqRecSecureDisablePortSecurity(struct cmdqRecStruct *handle,
-		const uint64_t engineFlag);
-
 
 /* Append mark command to the recorder
  * Parameter:

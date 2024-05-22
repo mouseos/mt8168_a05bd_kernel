@@ -171,6 +171,7 @@ static int xhci_mtk_host_disable(struct xhci_hcd_mtk *mtk)
 		dev_err(mtk->dev, "ip sleep failed!!!\n");
 		return ret;
 	}
+
 	return 0;
 }
 
@@ -695,6 +696,7 @@ static int xhci_mtk_probe(struct platform_device *pdev)
 		mu3h_hqa_create_attr(dev);
 	#endif
 
+
 	return 0;
 
 dealloc_usb2_hcd:
@@ -776,6 +778,7 @@ static int __maybe_unused xhci_mtk_suspend(struct device *dev)
 	xhci_mtk_phy_power_off(mtk);
 	xhci_mtk_clks_disable(mtk);
 	usb_wakeup_enable(mtk);
+
 	return 0;
 }
 
@@ -795,6 +798,7 @@ static int __maybe_unused xhci_mtk_resume(struct device *dev)
 	usb_hcd_poll_rh_status(xhci->shared_hcd);
 	set_bit(HCD_FLAG_POLL_RH, &hcd->flags);
 	usb_hcd_poll_rh_status(hcd);
+
 	return 0;
 }
 

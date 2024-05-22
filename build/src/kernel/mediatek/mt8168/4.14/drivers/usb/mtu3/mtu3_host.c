@@ -35,6 +35,11 @@
 #define UWK_CTL1_IDDIG_P	BIT(9)  /* polarity */
 #define UWK_CTL1_IS_P		BIT(6)  /* polarity for ip sleep */
 
+#define PERI_SSUSB_WK_CTRL0		0x420
+#define SSUSB0_CD_DEBOUNCE	(0xf << 28)
+#define SSUSB4_CD_DEBOUNCE_B0	BIT(12)
+#define SSUSB0_CDEN		BIT(6)
+
 /*
  * ip-sleep wakeup mode:
  * all clocks can be turn off, but power domain should be kept on
@@ -42,17 +47,14 @@
 static void ssusb_wakeup_ip_sleep_en(struct ssusb_mtk *ssusb)
 {
 	u32 tmp;
-	struct regmap *pericfg = ssusb->pericfg;
 
-	regmap_read(pericfg, PERI_WK_CTRL1, &tmp);
-	tmp &= ~UWK_CTL1_IS_P;
-	tmp &= ~(UWK_CTL1_IS_C(0xf));
-	tmp |= UWK_CTL1_IS_C(0x8);
-	regmap_write(pericfg, PERI_WK_CTRL1, tmp);
-	regmap_write(pericfg, PERI_WK_CTRL1, tmp | UWK_CTL1_IS_E);
-
-	regmap_read(pericfg, PERI_WK_CTRL1, &tmp);
-	dev_dbg(ssusb->dev, "%s(): WK_CTRL1[P6,E25,C26:29]=%#x\n",
+	regmap_read(ssusb->pericfg, PERI_SSUSB_WK_CTRL0, &tmp);
+	tmp &= ~SSUSB4_CD_DEBOUNCE_B0;
+	tmp |= SSUSB0_CD_DEBOUNCE;
+	tmp |= SSUSB0_CDEN;
+	regmap_write(ssusb->pericfg, PERI_SSUSB_WK_CTRL0, tmp);
+	regmap_read(ssusb->pericfg, PERI_SSUSB_WK_CTRL0, &tmp);
+	dev_dbg(ssusb->dev, "%s(): WK_CTRL0[P6,E25,C26:29]=%#x\n",
 		__func__, tmp);
 }
 
@@ -60,9 +62,10 @@ static void ssusb_wakeup_ip_sleep_dis(struct ssusb_mtk *ssusb)
 {
 	u32 tmp;
 
-	regmap_read(ssusb->pericfg, PERI_WK_CTRL1, &tmp);
-	tmp &= ~UWK_CTL1_IS_E;
-	regmap_write(ssusb->pericfg, PERI_WK_CTRL1, tmp);
+	regmap_read(ssusb->pericfg, PERI_SSUSB_WK_CTRL0, &tmp);
+	tmp &= ~SSUSB0_CDEN;
+	tmp &= ~SSUSB0_CD_DEBOUNCE;
+	regmap_write(ssusb->pericfg, PERI_SSUSB_WK_CTRL0, tmp);
 }
 
 int ssusb_wakeup_of_property_parse(struct ssusb_mtk *ssusb,
@@ -79,11 +82,21 @@ int ssusb_wakeup_of_property_parse(struct ssusb_mtk *ssusb,
 	if (!ssusb->wakeup_en)
 		return 0;
 
+	#if 0
 	ssusb->wk_deb_p0 = devm_clk_get(dev, "wakeup_deb_p0");
 	if (IS_ERR(ssusb->wk_deb_p0)) {
 		dev_err(dev, "fail to get wakeup_deb_p0\n");
 		return PTR_ERR(ssusb->wk_deb_p0);
 	}
+	#else
+	if (of_property_read_bool(dn, "wakeup_deb_p0")) {
+		ssusb->wk_deb_p0 = devm_clk_get(dev, "wakeup_deb_p0");
+		if (IS_ERR(ssusb->wk_deb_p0)) {
+			dev_err(dev, "fail to get wakeup_deb_p0\n");
+			return PTR_ERR(ssusb->wk_deb_p0);
+		}
+	}
+	#endif
 
 	if (of_property_read_bool(dn, "wakeup_deb_p1")) {
 		ssusb->wk_deb_p1 = devm_clk_get(dev, "wakeup_deb_p1");
@@ -205,7 +218,11 @@ int ssusb_host_disable(struct ssusb_mtk *ssusb, bool suspend)
 		value |= suspend ? 0 : SSUSB_U2_PORT_DIS;
 		mtu3_writel(ibase, SSUSB_U2_CTRL(i), value);
 	}
-
+	if ((num_u2p > 1) && !ssusb->keep_ao) {
+		value = mtu3_readl(ibase, SSUSB_U2_CTRL(1));
+		value |= SSUSB_U2_PORT_DIS;
+		mtu3_writel(ibase, SSUSB_U2_CTRL(1), value);
+	}
 	/* power down host ip */
 	mtu3_setbits(ibase, U3D_SSUSB_IP_PW_CTRL1, SSUSB_IP_HOST_PDN);
 

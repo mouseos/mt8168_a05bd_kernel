@@ -535,7 +535,7 @@ static int mt6370_pmu_dsv_probe(struct platform_device *pdev)
 
 	mt6370_pmu_dsv_debug_init(dsv_data->chip);
 
-	return 0;
+	return ret;
 reg_apply_dts_fail:
 reg_dsvn_register_fail:
 	regulator_unregister(dsv_data->dsvp->regulator);

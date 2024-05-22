@@ -516,6 +516,18 @@ struct ISP_CALLBACK_STRUCT {
 	pIspCallback Func;
 };
 
+struct ISP_DAPC_REG_STRUCT {
+	unsigned int CAM_CTL_EN_P1;
+	unsigned int CAM_CTL_EN_P1_DMA;
+	unsigned int CAM_CTL_EN_P1_D;
+	unsigned int CAM_CTL_EN_P1_DMA_D;
+	unsigned int CAM_CTL_FMT_SEL_P1;
+	unsigned int CAM_CTL_FMT_SEL_P1_D;
+	unsigned int CAM_CTL_SEL_P1;
+	unsigned int CAM_CTL_SEL_P1_D;
+	unsigned int CAM_CTL_SEL_GLOBAL;
+};
+
 /*  */
 /* length of the two memory areas */
 #define P1_DEQUE_CNT 1
@@ -801,8 +813,11 @@ struct CQ_INFO_RTBC_ST {
 };
 struct CQ_RING_CMD_ST {
 	struct CQ_INFO_RTBC_ST cq_rtbc;
-	unsigned long next_pa;
-	struct CQ_RING_CMD_ST *pNext;
+	uint64_t next_pa;
+	union {
+		struct CQ_RING_CMD_ST *pNext;
+		uint64_t pNext_pad;
+	};
 };
 struct CQ_RTBC_RING_ST {
 	struct CQ_RING_CMD_ST rtbc_ring[ISP_RT_CQ0C_BUF_SIZE];
@@ -952,6 +967,8 @@ enum ISP_CMD_ENUM {
 				      * mark
 				      */
 	ISP_CMD_FLUSH_IRQ_REQUEST,   /* flush signal */
+	ISP_CMD_SET_DAPC_REG,
+	ISP_CMD_CLEAR_DAPC_REG,
 };
 /*  */
 #define ISP_RESET_CAM_P1 _IO(ISP_MAGIC, ISP_CMD_RESET_CAM_P1)
@@ -1016,6 +1033,8 @@ enum ISP_CMD_ENUM {
 	_IOWR(ISP_MAGIC, ISP_CMD_GET_VSYNC_CNT,  unsigned int)
 #define ISP_RESET_VSYNC_CNT                                                    \
 	_IOW(ISP_MAGIC, ISP_CMD_RESET_VSYNC_CNT, unsigned int)
+#define ISP_SET_DAPC_REG                                                       \
+	_IOW(ISP_MAGIC, ISP_CMD_SET_DAPC_REG, struct ISP_DAPC_REG_STRUCT)
 
 #ifdef CONFIG_COMPAT
 

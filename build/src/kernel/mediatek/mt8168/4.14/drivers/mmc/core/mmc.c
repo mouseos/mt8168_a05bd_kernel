@@ -34,12 +34,6 @@
 #include <mt-plat/mtk_boot_common.h>
 #endif
 
-#ifdef CONFIG_AMAZON_METRICS_LOG
-#include <linux/metricslog.h>
-#define LMK_METRIC_TAG "kernel"
-#define METRICS_data_LEN 128
-#endif /* CONFIG_AMAZON_METRICS_LOG */
-
 #define DEFAULT_CMD6_TIMEOUT_MS	500
 #define MIN_CACHE_EN_TIMEOUT_MS 1600
 
@@ -851,10 +845,6 @@ MMC_DEV_ATTR(raw_rpmb_size_mult, "%#x\n", card->ext_csd.raw_rpmb_size_mult);
 MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
 MMC_DEV_ATTR(ocr, "0x%08x\n", card->ocr);
 MMC_DEV_ATTR(cmdq_en, "%d\n", card->ext_csd.cmdq_en);
-MMC_DEV_ATTR(dev_lifetime_est_typ_a, "0x%02x\n",
-		card->ext_csd.device_life_time_est_typ_a);
-MMC_DEV_ATTR(dev_lifetime_est_typ_b, "0x%02x\n",
-		card->ext_csd.device_life_time_est_typ_b);
 
 static ssize_t mmc_fwrev_show(struct device *dev,
 			      struct device_attribute *attr,
@@ -913,8 +903,6 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_ocr.attr,
 	&dev_attr_dsr.attr,
 	&dev_attr_cmdq_en.attr,
-	&dev_attr_dev_lifetime_est_typ_a.attr,
-	&dev_attr_dev_lifetime_est_typ_b.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(mmc_std);
@@ -1631,46 +1619,6 @@ static int mmc_hs200_tuning(struct mmc_card *card)
 	return mmc_execute_tuning(card);
 }
 
-#ifdef CONFIG_AMAZON_METRICS_LOG
-static int emmcmetrics_read(struct mmc_host *host)
-{
-	char logcat_emmc_data[METRICS_data_LEN];
-	struct mmc_card *card = host->card;
-
-	snprintf(logcat_emmc_data, METRICS_data_LEN,
-					"emmc:def:life_a=%d;CT;1,life_b=%d;CT;1:NR",
-					card->ext_csd.device_life_time_est_typ_a,
-					card->ext_csd.device_life_time_est_typ_b);
-	log_to_metrics(ANDROID_LOG_INFO, LMK_METRIC_TAG,
-						logcat_emmc_data);
-	log_counter_to_vitals(ANDROID_LOG_INFO, "Kernel", "Kernel",
-					"EMMC", "life_a", (u32)card->ext_csd.device_life_time_est_typ_a,
-					"count", NULL, VITALS_NORMAL);
-	log_counter_to_vitals(ANDROID_LOG_INFO, "Kernel", "Kernel",
-					 "EMMC", "life_b", (u32)card->ext_csd.device_life_time_est_typ_b,
-					 "count", NULL, VITALS_NORMAL);
-
-	return 0;
-}
-
-/*
- * Internal work. Work to output metrics at some later point.
- */
-void mmc_host_metrics_work(struct work_struct *work)
-{
-	struct mmc_host *host = container_of(work, struct mmc_host,
-						metrics_delay_work.work);
-	emmcmetrics_read(host);
-}
-
-static void metrics_delaywork_queue(struct mmc_host *host)
-{
-	/* delay 5 seconds to output metrics */
-	queue_delayed_work(system_wq, &host->metrics_delay_work,
-				msecs_to_jiffies(5000));
-}
-#endif /* CONFIG_AMAZON_METRICS_LOG */
-
 /*
  * Handle the detection and initialisation of a card.
  *
@@ -1760,9 +1708,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			memcpy(card->raw_cid, cid, sizeof(card->raw_cid));
 		}
 	}
-	/* always dump the CID, for diag SW statistic eMMC/SD distribution data in SMT */
-	pr_notice("[%d]DUMP_CID: %08x %08x %08x %08x\n",
-		card->host->index, card->raw_cid[0], card->raw_cid[1], card->raw_cid[2], card->raw_cid[3]);
 
 	/*
 	 * Call the optional HC's init_card function to handle quirks.
@@ -2556,10 +2501,6 @@ int mmc_attach_mmc(struct mmc_host *host)
 	err = mmc_init_card(host, rocr, NULL);
 	if (err)
 		goto err;
-
-#ifdef CONFIG_AMAZON_METRICS_LOG
-	metrics_delaywork_queue(host);
-#endif /* CONFIG_AMAZON_METRICS_LOG */
 
 	mmc_release_host(host);
 

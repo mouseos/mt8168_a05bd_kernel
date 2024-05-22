@@ -806,8 +806,7 @@ static int input_config_preprocess(struct disp_frame_cfg_t *cfg)
 				cfg->input_cfg[i].next_buff_idx, mva_offset,
 				cfg->input_cfg[i].frm_sequence
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
-				, dst_mva, cfg->input_cfg[i].security,
-				&(cfg->input_cfg[i].layer_enable)
+				, dst_mva, cfg->input_cfg[i].security
 #endif
 				);
 
@@ -920,7 +919,7 @@ static int output_config_preprocess(struct disp_frame_cfg_t *cfg)
 			      cfg->output_cfg.buff_idx, 0,
 		cfg->output_cfg.frm_sequence
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
-		, dst_mva, cfg->output_cfg.security, NULL
+		, dst_mva, cfg->output_cfg.security
 #endif
 			      );
 
@@ -1051,17 +1050,18 @@ long _frame_config(unsigned long arg)
 		return -EFAULT;
 	}
 
-	if (disp_validate_ioctl_params(frame_cfg)) {
-		kfree(frame_cfg);
-		return -EINVAL;
-	}
-
 	DISPDBG("%s\n", __func__);
 	frame_cfg->setter = SESSION_USER_HWC;
 
 	input_config_preprocess(frame_cfg);
 	if (frame_cfg->output_en)
 		output_config_preprocess(frame_cfg);
+
+	if (disp_validate_ioctl_params(frame_cfg)) {
+		disp_input_free_dirty_roi(frame_cfg);
+		kfree(frame_cfg);
+		return -EINVAL;
+	}
 
 	if (DISP_SESSION_TYPE(frame_cfg->session_id) == DISP_SESSION_PRIMARY)
 		primary_display_frame_cfg(frame_cfg);
@@ -1095,11 +1095,6 @@ static int _ioctl_wait_all_jobs_done(unsigned long arg)
 	unsigned int session_id = (unsigned int)arg;
 	struct frame_queue_head_t *head;
 	int ret = 0;
-
-	if (session_id > MAX_SESSION_COUNT - 1) {
-		DISPERR("%s error session_id=%d\n", __func__, session_id);
-		return -EINVAL;
-	}
 
 	head = get_frame_queue_head(session_id);
 	if (!head) {
@@ -1882,11 +1877,13 @@ static int mtk_disp_mgr_probe(struct platform_device *pdev)
 	struct class_device *class_dev = NULL;
 	int ret;
 
-	pr_debug("%s called!\n", __func__);
+	pr_info("%s called!\n", __func__);
 
 	if (alloc_chrdev_region(&mtk_disp_mgr_devno, 0, 1,
-		DISP_SESSION_DEVICE))
+		DISP_SESSION_DEVICE)) {
+		pr_info("%s alloc_chrdev_region failed\n", __func__);
 		return -EFAULT;
+	}
 
 	mtk_disp_mgr_cdev = cdev_alloc();
 	mtk_disp_mgr_cdev->owner = THIS_MODULE;
@@ -1894,16 +1891,29 @@ static int mtk_disp_mgr_probe(struct platform_device *pdev)
 
 	ret = cdev_add(mtk_disp_mgr_cdev, mtk_disp_mgr_devno, 1);
 	if (ret) {
-		DISPERR("cdev_add failed!\n");
+		DISPERR("%s cdev_add failed!\n", __func__);
 		unregister_chrdev_region(mtk_disp_mgr_devno, 1);
 		return ret;
 	}
 
 	mtk_disp_mgr_class = class_create(THIS_MODULE, DISP_SESSION_DEVICE);
+	if (IS_ERR(mtk_disp_mgr_class))
+		pr_info("%s class_create failed err=%ld\n",
+			__func__, PTR_ERR(mtk_disp_mgr_class));
+	else
+		pr_info("%s class_create success\n",
+			__func__);
 	class_dev =
 	    (struct class_device *)device_create(mtk_disp_mgr_class, NULL,
 	    mtk_disp_mgr_devno, NULL,
 						 DISP_SESSION_DEVICE);
+	if (IS_ERR(class_dev))
+		pr_info("%s device_create failed err=%ld\n",
+			__func__, PTR_ERR(class_dev));
+	else
+		pr_info("%s device_create success\n",
+			__func__);
+
 	disp_sync_init();
 
 	external_display_control_init();
@@ -1963,20 +1973,24 @@ static struct platform_device mtk_disp_mgr_device = {
 
 static int __init mtk_disp_mgr_init(void)
 {
-	pr_debug("%s\n", __func__);
-	if (platform_device_register(&mtk_disp_mgr_device))
-		return -ENODEV;
-
-	if (platform_driver_register(&mtk_disp_mgr_driver)) {
-		platform_device_unregister(&mtk_disp_mgr_device);
+	pr_info("%s\n", __func__);
+	if (platform_device_register(&mtk_disp_mgr_device)) {
+		pr_info("%s device reg failed\n", __func__);
 		return -ENODEV;
 	}
 
+	if (platform_driver_register(&mtk_disp_mgr_driver)) {
+		platform_device_unregister(&mtk_disp_mgr_device);
+		pr_info("%s driver reg failed\n", __func__);
+		return -ENODEV;
+	}
+	pr_info("%s done\n", __func__);
 	return 0;
 }
 
 static void __exit mtk_disp_mgr_exit(void)
 {
+	pr_info("%s\n", __func__);
 	cdev_del(mtk_disp_mgr_cdev);
 	unregister_chrdev_region(mtk_disp_mgr_devno, 1);
 

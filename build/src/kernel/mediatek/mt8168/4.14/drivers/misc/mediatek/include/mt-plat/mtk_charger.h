@@ -60,10 +60,6 @@ struct charger_consumer {
 extern struct charger_consumer *charger_manager_get_by_name(
 	struct device *dev,
 	const char *supply_name);
-extern int charger_manager_enable_dcap(
-	struct charger_consumer *consumer,
-	int idx,
-	bool en);
 extern int charger_manager_set_input_current_limit(
 	struct charger_consumer *consumer,
 	int idx,
@@ -110,8 +106,6 @@ extern int charger_manager_enable_kpoc_shutdown(
 	struct charger_consumer *consumer,
 	bool en);
 extern int mtk_chr_is_charger_exist(unsigned char *exist);
-extern bool mtk_chr_is_dcap_enable(void);
 extern bool is_power_path_supported(void);
-extern bool is_mtk_charger_init_done(void);
 
 #endif /* __MTK_CHARGER_H__ */

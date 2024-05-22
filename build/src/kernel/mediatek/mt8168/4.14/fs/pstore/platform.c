@@ -658,7 +658,24 @@ static void pstore_simp_console_write(struct console *con, const char *s,
 
 void pstore_bconsole_write(struct console *con, const char *s, unsigned int c)
 {
-	pstore_simp_console_write(con, s, c);
+	const char *e = s + c;
+
+	while (s < e) {
+		struct pstore_record record;
+
+		pstore_record_init(&record, psinfo);
+		record.type = PSTORE_TYPE_CONSOLE;
+		record.reason = 1;
+
+		if (c > psinfo->bufsize)
+			c = psinfo->bufsize;
+
+		record.buf = (char *)s;
+		record.size = c;
+		psinfo->write(&record);
+		s += c;
+		c = e - s;
+	}
 }
 
 static struct console pstore_console = {

@@ -256,18 +256,14 @@ extern unsigned int pmic_config_interface_nolock(unsigned int RegNum,
  * RTC_SPAR0:
  *     bit 0 - 5 : SEC in power-on time
  *     bit 6     : 32K less bit. True:with 32K, False:Without 32K
- *     bit 7     : LP_DET
- *     bit 8     : Enter KPOC
- *     bit 9     : Enter SW LPRST
- *     bit 10 - 15: reserved bits
+ *     bit 7 - 15: reserved bits
  */
 #define RTC_SPAR0			(PMIC_RTC_SPAR0_ADDR)
 #define RTC_SPAR0_PWRON_SEC_MASK	0x003f
 #define RTC_SPAR0_PWRON_SEC_SHIFT	0
 #define RTC_SPAR0_32K_LESS		(1U << 6)
 #define RTC_SPAR0_LP_DET		(1U << 7)
-#define RTC_SPAR0_ENTER_KPOC		(1U << 8)
-#define RTC_SPAR0_SW_LPRST		(1U << 9)
+#define RTC_SPAR0_PWROFF		(1U << 8)
 
 /*
  * RTC_SPAR1:

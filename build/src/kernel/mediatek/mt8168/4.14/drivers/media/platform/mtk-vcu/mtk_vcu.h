@@ -130,7 +130,8 @@ enum ipi_id {
 	IPI_MDP_1,
 	IPI_MDP_2,
 	IPI_MDP_3,
-	IPI_CAMERA = 40,
+	IPI_CAMERA_MAIN = 40,
+	IPI_CAMERA_SUB,
 	IPI_MAX = 50,
 };
 
@@ -139,6 +140,7 @@ enum vcu_codec_type {
 	VCU_VENC,
 	VCU_CODEC_MAX
 };
+
 enum vcu_id {
 	MTK_VCU_VCODEC = 0,
 	MTK_VCU_MDP,
@@ -159,7 +161,7 @@ enum vcu_id {
  * Return: Return 0 if ipi registers successfully, otherwise it is failed.
  */
 int vcu_ipi_register(struct platform_device *pdev, enum ipi_id id,
-		     ipi_handler_t handler, const char *name, void *priv);
+	ipi_handler_t handler, const char *name, void *priv);
 
 /**
  * vcu_ipi_send - send data from AP to vcu.
@@ -168,7 +170,6 @@ int vcu_ipi_register(struct platform_device *pdev, enum ipi_id id,
  * @id:         IPI ID
  * @buf:        the data buffer
  * @len:        the data buffer length
- * @priv:       private data for IPI handler
  *
  * This function is thread-safe. When this function returns,
  * VCU has received the data and starts the processing.
@@ -253,6 +254,7 @@ void *vcu_mapping_dm_addr(struct platform_device *pdev,
  *
  * @task:       VCUD task
  * @f:          VCUD task file
+ * @reset:      flag to reset task and file
  *
  * Get VCUD task information from mtk_vcu driver.
  *
@@ -264,7 +266,6 @@ void vcu_put_file_lock(void);
 extern void smp_inner_dcache_flush_all(void);
 int vcu_set_codec_ctx(struct platform_device *pdev,
 		 void *codec_ctx, unsigned long type);
-
 extern void venc_encode_prepare(void *ctx_prepare, unsigned long *flags);
 extern void venc_encode_unprepare(void *ctx_prepare, unsigned long *flags);
 extern void dump_emi_outstanding(void);

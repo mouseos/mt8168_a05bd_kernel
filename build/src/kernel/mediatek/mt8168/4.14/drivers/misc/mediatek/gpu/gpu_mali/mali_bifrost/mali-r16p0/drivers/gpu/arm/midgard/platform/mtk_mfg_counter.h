@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2017 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,9 +29,17 @@ extern int (*mtk_get_gpu_pmu_swapnreset_fp)(GPU_PMU *pmus, int pmu_size);
 extern int (*mtk_get_gpu_pmu_swapnreset_stop_fp)(void);
 /* Need to get current gpu freq from GPU DVFS module */
 extern unsigned int mt_gpufreq_get_cur_freq(void);
+extern unsigned int mt_gpufreq_get_cur_volt(void);
+
+
+int get_mali_pmu_counter(int i);
+int gator_gpu_pmu_init(void);
+int mtk_mfg_update_counter(void);
+int find_name_pos(const char *name, int *pos);
 
 void mtk_mfg_counter_init(void);
 void mtk_mfg_counter_destroy(void);
+void mali_gpu_pmu_stop(void);
 
 
 #endif

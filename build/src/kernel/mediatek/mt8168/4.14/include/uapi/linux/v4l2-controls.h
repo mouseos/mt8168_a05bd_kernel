@@ -203,6 +203,12 @@ enum v4l2_colorfx {
  * We reserve 16 controls for this driver. */
 #define V4L2_CID_USER_TC358743_BASE		(V4L2_CID_USER_BASE + 0x1080)
 
+/*
+ * The base for the mtk-mdp driver controls.
+ * We reserve 32 controls for this driver.
+ */
+#define V4L2_CID_USER_MTK_MDP_BASE		(V4L2_CID_USER_BASE + 0x1090)
+
 /* The base for the max217x driver controls.
  * We reserve 32 controls for this driver
  */
@@ -215,6 +221,14 @@ enum v4l2_colorfx {
 /* The base for the mtk-warp driver controls.
  * We reserve 16 controls for this driver.
  */
+
+/*
+ * The base for the mtk-camera driver controls.
+ * We reserve 32 controls for this driver.
+ */
+#define V4L2_CID_USER_MTK_CAMERA_BASE		(V4L2_CID_USER_BASE + 0x10a0)
+
+
 #define V4L2_CID_USER_MTK_WARP_BASE		(V4L2_CID_USER_BASE + 0x10b0)
 
 /* MPEG-class control IDs */
@@ -429,8 +443,7 @@ enum v4l2_mpeg_video_multi_slice_mode {
 #define V4L2_CID_MPEG_VIDEO_MV_H_SEARCH_RANGE		(V4L2_CID_MPEG_BASE+227)
 #define V4L2_CID_MPEG_VIDEO_MV_V_SEARCH_RANGE		(V4L2_CID_MPEG_BASE+228)
 #define V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME		(V4L2_CID_MPEG_BASE+229)
-#define V4L2_CID_MPEG_VIDEO_ENABLE_TSVC			(V4L2_CID_MPEG_BASE+230)
-#define V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ		(V4L2_CID_MPEG_BASE+231)
+#define V4L2_CID_MPEG_VIDEO_ENABLE_TSVC		(V4L2_CID_MPEG_BASE+230)
 
 #define V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP		(V4L2_CID_MPEG_BASE+300)
 #define V4L2_CID_MPEG_VIDEO_H263_P_FRAME_QP		(V4L2_CID_MPEG_BASE+301)
@@ -735,6 +748,20 @@ enum v4l2_mpeg_cx2341x_video_median_filter_type {
 	(V4L2_CID_MPEG_MTK_BASE+12)
 #define V4L2_CID_MPEG_MTK_ENCODE_ROI_ON \
 	(V4L2_CID_MPEG_MTK_BASE+13)
+#define V4L2_CID_MPEG_MTK_ENCODE_NONREFP_FREQ \
+	(V4L2_CID_MPEG_MTK_BASE+19)
+
+#define V4L2_CID_MPEG_MTK_ENCODE_MAX_REFP_NUM \
+	(V4L2_CID_MPEG_MTK_BASE+20)
+
+#define V4L2_CID_MPEG_MTK_ENCODE_REFP_DISTANCE \
+	(V4L2_CID_MPEG_MTK_BASE+21)
+
+#define V4L2_CID_MPEG_MTK_ENCODE_REFP_MAX_FRAME_NUM \
+	(V4L2_CID_MPEG_MTK_BASE+22)
+
+#define V4L2_CID_MPEG_MTK_ENCODE_REFP_FRAME_NUM \
+	(V4L2_CID_MPEG_MTK_BASE+23)
 
 /*  MPEG-class control IDs specific to the Samsung MFC 5.1 driver as defined by V4L2 */
 #define V4L2_CID_MPEG_MFC51_BASE				(V4L2_CTRL_CLASS_MPEG | 0x1100)
@@ -980,6 +1007,7 @@ enum v4l2_jpeg_chroma_subsampling {
 #define	V4L2_CID_JPEG_COMPRESSION_QUALITY	(V4L2_CID_JPEG_CLASS_BASE + 3)
 
 #define	V4L2_CID_JPEG_ACTIVE_MARKER		(V4L2_CID_JPEG_CLASS_BASE + 4)
+#define	V4L2_CID_JPEG_ENABLE_EXIF		(V4L2_CID_JPEG_CLASS_BASE + 5)
 #define	V4L2_JPEG_ACTIVE_MARKER_APP0		(1 << 0)
 #define	V4L2_JPEG_ACTIVE_MARKER_APP1		(1 << 1)
 #define	V4L2_JPEG_ACTIVE_MARKER_COM		(1 << 16)

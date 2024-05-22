@@ -31,6 +31,9 @@
 #include <linux/atomic.h>
 #include <asm/setup.h>
 #include <mt-plat/mtk_devinfo.h>
+#ifdef CONFIG_MTK_SECURE_EFUSE
+#include <trustzone/tz_cross/ta_efuse.h>
+#endif
 #include "devinfo.h"
 
 enum {
@@ -83,6 +86,12 @@ u32 get_devinfo_with_index(u32 index)
 	int size = devinfo_get_size();
 	u32 ret = 0;
 
+#ifdef CONFIG_MTK_SECURE_EFUSE
+	int i;
+	unsigned char data[256];
+	unsigned int len = 4;
+#endif
+
 #ifdef CONFIG_OF
 	if (size == 0) {
 		/* Devinfo API users may call this API earlier than devinfo
@@ -94,14 +103,27 @@ u32 get_devinfo_with_index(u32 index)
 	}
 #endif
 
-	if (((index >= 0) && (index < size)) && (g_devinfo_data != NULL))
-		ret = g_devinfo_data[index];
-	else {
-		pr_err("%s data index %d is larger than total size %d\n",
+	if (devinfo_ready()) {
+		if (((index >= 0) && (index < size)) &&
+				(g_devinfo_data != NULL))
+			ret = g_devinfo_data[index];
+		else {
+			pr_info("%s data index %d is larger than total size %d\n",
 				MODULE_NAME, index, size);
-		ret = 0xFFFFFFFF;
+			ret = 0xFFFFFFFF;
+		}
 	}
-
+#ifdef CONFIG_MTK_SECURE_EFUSE
+	else {
+		ret = tee_fuse_read(index, data, len);
+		if (ret) {
+			pr_info("tee_fuse_read fail (%d)\n", index);
+		} else {
+			for (i = 0; i < len; i++)
+				ret |= (*(data+i))<<(i*8);
+		}
+	}
+#endif
 	return ret;
 }
 EXPORT_SYMBOL(get_devinfo_with_index);

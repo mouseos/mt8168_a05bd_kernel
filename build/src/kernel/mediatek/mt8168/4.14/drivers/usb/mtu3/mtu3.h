@@ -203,13 +203,12 @@ struct mtu3_gpd_ring {
 */
 struct otg_switch_mtk {
 	struct regulator *vbus;
+	struct regulator *vbst_5v;
 	struct extcon_dev *edev;
 	struct notifier_block vbus_nb;
 	struct notifier_block id_nb;
 	struct delayed_work extcon_reg_dwork;
 	bool is_u3_drd;
-	bool use_typec;
-
 	/* dual-role switch by debugfs */
 	struct pinctrl *id_pinctrl;
 	struct pinctrl_state *id_float;
@@ -249,6 +248,7 @@ struct ssusb_mtk {
 	/* otg */
 	struct otg_switch_mtk otg_switch;
 	struct delayed_work clk_ctl_dwork;
+	struct delayed_work otg_detect_dwork;
 	enum usb_dr_mode dr_mode;
 	bool is_host;
 	int u2_ports;

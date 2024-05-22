@@ -30,16 +30,6 @@
 #include <tspmic_settings.h>
 #include <linux/uidgid.h>
 #include <linux/slab.h>
-#include <linux/reboot.h>
-
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-#include <linux/sign_of_life.h>
-#endif
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-#include <linux/thermal_framework.h>
-#endif
-
-#include "thermal_core.h"
 
 /*=============================================================
  *Local variable definition
@@ -237,31 +227,6 @@ struct thermal_zone_device *thermal, int *temperature)
 	return 0;
 }
 
-static int mtktspmic_thermal_notify(struct thermal_zone_device *thermal,
-				int trip, enum thermal_trip_type type)
-{
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("[%s][%s]type:[%s] Thermal shutdown PMIC, current temp=%d, trip=%d, trip_temp=%d\n",
-			__func__, dev_name(&thermal->device), thermal->type,
-			thermal->temperature, trip, trip_temp[trip]);
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_PMIC);
-	}
-#endif
-
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("%s: thermal_shutdown notify\n", __func__);
-		last_kmsg_thermal_shutdown();
-		pr_err("%s: thermal_shutdown notify end\n", __func__);
-	}
-#endif
-	if (type == THERMAL_TRIP_CRITICAL)
-		set_shutdown_enable_dcap(&thermal->device);
-
-	return 0;
-}
-
 /* bind callback functions to thermalzone */
 static struct thermal_zone_device_ops mtktspmic_dev_ops = {
 	.bind = mtktspmic_bind,
@@ -272,7 +237,6 @@ static struct thermal_zone_device_ops mtktspmic_dev_ops = {
 	.get_trip_type = mtktspmic_get_trip_type,
 	.get_trip_temp = mtktspmic_get_trip_temp,
 	.get_crit_temp = mtktspmic_get_crit_temp,
-	.notify = mtktspmic_thermal_notify,
 };
 
 static int tspmic_sysrst_get_max_state(
@@ -292,31 +256,17 @@ struct thermal_cooling_device *cdev, unsigned long *state)
 static int tspmic_sysrst_set_cur_state(
 struct thermal_cooling_device *cdev, unsigned long state)
 {
-	struct thermal_instance *instance;
-	int trip_temp;
 	cl_dev_sysrst_state = state;
 	if (cl_dev_sysrst_state == 1) {
-		pr_err("Power/PMIC_Thermal: reset, reset, reset!!!");
-		pr_err("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-		pr_err("*****************************************");
-		pr_err("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+		mtktspmic_info("Power/PMIC_Thermal: reset, reset, reset!!!");
+		mtktspmic_info("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+		mtktspmic_info("*****************************************");
+		mtktspmic_info("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
 
-		list_for_each_entry(instance, &(cdev->thermal_instances), cdev_node) {
-			if (instance->tz && instance->tz->ops && instance->tz->ops->get_trip_temp) {
-				instance->tz->ops->get_trip_temp(instance->tz, instance->trip, &trip_temp);
-				pr_err("[%s][%s]type:[%s] Thermal reset PMIC, current temp=%d, trip=%d, trip_temp=%d\n",
-					__func__, dev_name(&(instance->tz->device)), instance->tz->type,
-					instance->tz->temperature, instance->trip, trip_temp);
-			}
-		}
-
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_PMIC);
-#endif
 		/* To trigger data abort to reset the system
 		 * for thermal protection.
 		 */
-		kernel_restart(NULL);
+		BUG();
 
 	}
 	return 0;

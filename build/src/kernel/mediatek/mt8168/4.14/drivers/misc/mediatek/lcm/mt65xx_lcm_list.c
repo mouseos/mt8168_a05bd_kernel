@@ -882,28 +882,6 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 	&jd9366_wxga_dsi_vdo_fiti_kd_lcm_drv,
 #endif
 
-#if defined(JD936X_WXGA_DSI_VDO_ONYX)
-	&jd9365d_wxga_dsi_vdo_fiti_inx_inx_onyx_lcm_drv,
-	&jd9365d_wxga_dsi_vdo_fiti_inx_inx_onyx_proto_lcm_drv,
-	&jd9365d_wxga_dsi_vdo_fiti_kd_hsd_onyx_lcm_drv,
-	&jd9365d_wxga_dsi_vdo_fiti_kd_auo_onyx_lcm_drv,
-	&jd9366ab_wxga_dsi_vdo_fiti_tg_boe_onyx_lcm_drv,
-	&jd9365d_wxga_dsi_vdo_fiti_tah_tg_boe_onyx_lcm_drv,
-#endif
-
-#if defined(ILI9881C_WXGA_DSI_VDO_ONYX)
-	&ili9881c_wxga_dsi_vdo_ili_tg_inx_onyx_lcm_drv,
-	&ili9881c_wxga_dsi_vdo_ili_kd_auo_onyx_lcm_drv,
-	&ili9881c_wxga_dsi_vdo_ili_kd_hsd_onyx_lcm_drv,
-#endif
-
-#if defined(SC7705_WXGA_DSI_VDO_ONYX)
-	&sc7705_wxga_dsi_vdo_sitr_kd_boe_onyx_lcm_drv
-#endif
-
-#if defined(JD936X_WXGA_DSI_VDO_PEREGRINE)
-	&jd936x_wxga_dsi_vdo_peregrine_lcm_drv,
-#endif
 #if defined(S6D7AA0_WXGA_DSI_VDO)
 	&s6d7aa0_wxga_dsi_vdo_lcm_drv,
 #endif
@@ -1131,6 +1109,10 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 #endif
 #if defined(NT36672_FHDP_DSI_VDO_AUO_LANESWAP)
 	&nt36672_fhdp_dsi_vdo_auo_laneswap_lcm_drv,
+#endif
+
+#if defined(KD101N92_45NI_A003_DSI)
+	&kd101n92_45ni_a003_dsi_lcm_drv,
 #endif
 };
 

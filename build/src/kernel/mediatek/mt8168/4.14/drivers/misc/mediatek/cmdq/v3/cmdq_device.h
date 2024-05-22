@@ -80,6 +80,7 @@ typedef void(*CMDQ_DEV_INIT_RESOURCE_CB) (u32 engineFlag,
 void cmdq_dev_get_dts_setting(struct cmdq_dts_setting *dts_setting);
 void cmdq_dev_init_resource(CMDQ_DEV_INIT_RESOURCE_CB init_cb);
 
+int cmdq_dev_copy_task_to_dram(u32 pc, int *va);
 
 
 

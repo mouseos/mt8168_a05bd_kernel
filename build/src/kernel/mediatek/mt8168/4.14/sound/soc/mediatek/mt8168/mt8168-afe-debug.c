@@ -259,7 +259,7 @@ static ssize_t mt8168_afe_dump_registers(char __user *user_buf,
 {
 	ssize_t ret, i;
 	char *buf;
-	unsigned int reg_value = 0;
+	unsigned int reg_value;
 	int n = 0;
 
 	buf = kmalloc(count, GFP_KERNEL);

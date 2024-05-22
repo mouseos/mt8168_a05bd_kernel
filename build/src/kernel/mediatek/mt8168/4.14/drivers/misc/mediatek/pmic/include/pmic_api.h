@@ -42,9 +42,7 @@
 #include "mt6359/mtk_pmic_api.h"
 #endif
 
-enum {
-	PMIC_MT6357_SWCID = 0x57,
-	PMIC_MT6390_SWCID = 0x90,
-};
-
+#ifdef CONFIG_MTK_PMIC_CHIP_MT6390
+#include "mt6390/mtk_pmic_api.h"
+#endif
 #endif				/* _PMIC_API_H_ */

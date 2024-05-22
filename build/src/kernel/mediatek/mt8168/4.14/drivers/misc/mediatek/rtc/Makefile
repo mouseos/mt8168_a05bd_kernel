@@ -11,6 +11,10 @@
 # GNU General Public License for more details.
 #
 
+ifneq (,$(filter y,$(CONFIG_MTK_PMIC_CHIP_MT6390)))
+  MDI_IP_FOLDER:=mt6357
+endif
+
 ifneq (,$(filter y,$(CONFIG_MTK_PMIC_CHIP_MT6357)))
   MDI_IP_FOLDER:=mt6357
 endif

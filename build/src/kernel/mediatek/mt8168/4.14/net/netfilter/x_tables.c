@@ -1250,7 +1250,7 @@ xt_replace_table(struct xt_table *table,
 	 * Ensure contents of newinfo are visible before assigning to
 	 * private.
 	 */
-	smp_mb();
+	smp_wmb();
 	table->private = newinfo;
 
 	/*

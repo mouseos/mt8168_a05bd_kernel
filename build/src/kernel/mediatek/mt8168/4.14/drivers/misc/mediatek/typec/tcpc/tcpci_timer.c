@@ -1205,7 +1205,6 @@ static inline void tcpc_reset_timer_range(
 		if (mask & RT_MASK64(i)) {
 			hrtimer_try_to_cancel(&tcpc->tcpc_timer[i]);
 			tcpc_clear_timer_enable_mask(tcpc, i);
-			atomic_dec_if_positive(&tcpc->suspend_pending);
 		}
 	}
 
@@ -1235,9 +1234,7 @@ void tcpc_enable_wakeup_timer(struct tcpc_device *tcpc, bool en)
 void tcpc_enable_timer(struct tcpc_device *tcpc, uint32_t timer_id)
 {
 	uint32_t r, mod, tout;
-	uint64_t mask_curr, mask_prev;
 
-	mask_prev = tcpc_get_timer_enable_mask(tcpc);
 	TCPC_TIMER_EN_DBG(tcpc, timer_id);
 	PD_BUG_ON(timer_id >= PD_TIMER_NR);
 
@@ -1246,12 +1243,6 @@ void tcpc_enable_timer(struct tcpc_device *tcpc, uint32_t timer_id)
 		tcpc_reset_timer_range(tcpc, TYPEC_TIMER_START_ID, PD_TIMER_NR);
 
 	tcpc_set_timer_enable_mask(tcpc, timer_id);
-
-	mask_curr = tcpc_get_timer_enable_mask(tcpc);
-	if (mask_prev ^ mask_curr)
-		atomic_inc(&tcpc->suspend_pending);
-	else
-		atomic_dec_if_positive(&tcpc->suspend_pending);
 
 	tout = tcpc_timer_timeout[timer_id];
 
@@ -1279,7 +1270,6 @@ void tcpc_disable_timer(struct tcpc_device *tcpc_dev, uint32_t timer_id)
 	if (mask & RT_MASK64(timer_id)) {
 		hrtimer_try_to_cancel(&tcpc_dev->tcpc_timer[timer_id]);
 		tcpc_clear_timer_enable_mask(tcpc_dev, timer_id);
-		atomic_dec_if_positive(&tcpc_dev->suspend_pending);
 	}
 }
 
@@ -1330,7 +1320,6 @@ static void tcpc_handle_timer_triggered(struct tcpc_device *tcpc_dev)
 	triggered_timer = tcpc_get_timer_tick(tcpc_dev);
 	enable_mask = tcpc_get_timer_enable_mask(tcpc_dev);
 
-	atomic_inc(&tcpc_dev->suspend_pending);
 #ifdef CONFIG_USB_POWER_DELIVERY
 	for (i = 0; i < PD_PE_TIMER_END_ID; i++) {
 		if (triggered_timer & RT_MASK64(i)) {
@@ -1343,7 +1332,6 @@ static void tcpc_handle_timer_triggered(struct tcpc_device *tcpc_dev)
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
 	mutex_lock(&tcpc_dev->typec_lock);
-	enable_mask = tcpc_get_timer_enable_mask(tcpc_dev);
 	for (; i < PD_TIMER_NR; i++) {
 		if (triggered_timer & RT_MASK64(i)) {
 			TCPC_TIMER_DBG(tcpc_dev, i);
@@ -1353,7 +1341,7 @@ static void tcpc_handle_timer_triggered(struct tcpc_device *tcpc_dev)
 		}
 	}
 	mutex_unlock(&tcpc_dev->typec_lock);
-	atomic_dec_if_positive(&tcpc_dev->suspend_pending);
+
 }
 
 static int tcpc_timer_thread(void *param)

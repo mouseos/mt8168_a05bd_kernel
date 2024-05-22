@@ -20,7 +20,6 @@
 #include <linux/gpio.h>
 #include <linux/pm_wakeup.h>
 #include <linux/reboot.h>
-#include <linux/pm.h>
 
 #include "tcpm.h"
 
@@ -41,19 +40,6 @@
 
 static DEFINE_MUTEX(param_lock);
 
-struct pd_manager_info {
-	struct device *dev;
-	/* Charger Detection */
-	struct mutex chgdet_lock;
-	bool chgdet_en;
-	atomic_t chgdet_cnt;
-	wait_queue_head_t waitq;
-	struct kthread_work chgdet_task_threadfn;
-	struct task_struct *chgdet_task;
-};
-
-static struct pd_manager_info *pmi;
-
 static struct tcpc_device *tcpc_dev;
 static struct notifier_block pd_nb;
 static int pd_sink_voltage_new;
@@ -73,6 +59,11 @@ static unsigned char vconn_on;
 static struct charger_device *primary_charger;
 static struct charger_consumer *chg_consumer;
 #endif
+
+static void tcpc_mt_power_off(void)
+{
+	kernel_power_off();
+}
 
 #if CONFIG_MTK_GAUGE_VERSION == 20
 #ifdef CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT
@@ -170,9 +161,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 					unsigned long event, void *data)
 {
 	struct tcp_notify *noti = data;
+	u32 vbus = 0;
 	int ret = 0;
 	int boot_mode = 0;
-	bool wpc_online = false;
 
 	switch (event) {
 	case TCP_NOTIFY_SOURCE_VCONN:
@@ -216,11 +207,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			if (pd_sink_voltage_new) {
 				/* enable charger */
 #if CONFIG_MTK_GAUGE_VERSION == 30
-				/* disable wireless charger to reset mivr when usb plug in */
-				wireless_charger_dev_force_en_charge(
-					get_charger_by_name("wireless_chg"), false);
-				wireless_charger_dev_set_wpc_en(
-					get_charger_by_name("wireless_chg"), false);
 				charger_manager_enable_power_path(chg_consumer,
 					MAIN_CHARGER, true);
 #else
@@ -232,8 +218,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 				if (tcpc_kpoc)
 					break;
 #if CONFIG_MTK_GAUGE_VERSION == 30
-				wireless_charger_dev_set_wpc_en(
-					get_charger_by_name("wireless_chg"), true);
 				charger_manager_enable_power_path(chg_consumer,
 					MAIN_CHARGER, false);
 #else
@@ -264,21 +248,17 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		if (noti->typec_state.new_state == TYPEC_ATTACHED_SNK ||
 		    noti->typec_state.new_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 		    noti->typec_state.new_state == TYPEC_ATTACHED_NORP_SRC) {
-			wireless_charger_dev_get_online(
-				get_charger_by_name("wireless_chg"),
-				&wpc_online);
-			if (wpc_online && noti->typec_state.new_state == TYPEC_ATTACHED_NORP_SRC) {
-				pr_info("%s:WPC online, ignore NORP.SRC\n",
-					__func__);
-				return NOTIFY_DONE;
-			}
+#ifdef CONFIG_MTK_EXTERNAL_CHARGER_TYPE_DETECT
+#if CONFIG_MTK_GAUGE_VERSION == 30
+			charger_dev_enable_chg_type_det(primary_charger, true);
+#else
+			mtk_chr_enable_chr_type_det(true);
+#endif
+#else
+			mtk_pmic_enable_chr_type_det(true);
+#endif
 			pr_info("%s USB Plug in, pol = %d\n", __func__,
 					noti->typec_state.polarity);
-			mutex_lock(&pmi->chgdet_lock);
-			pmi->chgdet_en = true;
-			atomic_inc(&pmi->chgdet_cnt);
-			wake_up_interruptible(&pmi->waitq);
-			mutex_unlock(&pmi->chgdet_lock);
 #if CONFIG_MTK_GAUGE_VERSION == 20
 #ifdef CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT
 			mutex_lock(&pd_chr_mutex);
@@ -294,6 +274,13 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			noti->typec_state.old_state == TYPEC_ATTACHED_NORP_SRC)
 			&& (noti->typec_state.new_state == TYPEC_UNATTACHED ||
 			noti->typec_state.new_state == TYPEC_ATTACHED_SRC)) {
+			if (tcpc_kpoc) {
+				vbus = battery_get_vbus();
+				pr_info("%s KPOC Plug out, vbus = %d\n",
+					__func__, vbus);
+				tcpc_mt_power_off();
+				break;
+			}
 			pr_info("%s USB Plug out\n", __func__);
 #if CONFIG_MTK_GAUGE_VERSION == 20
 #ifdef CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT
@@ -305,12 +292,16 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			pr_notice("TCP_NOTIFY_SINK_VBUS=> plug out");
 #endif
 #endif
-			mutex_lock(&pmi->chgdet_lock);
-			pmi->chgdet_en = false;
-			atomic_inc(&pmi->chgdet_cnt);
-			wake_up_interruptible(&pmi->waitq);
-			mutex_unlock(&pmi->chgdet_lock);
-
+#ifdef CONFIG_MTK_EXTERNAL_CHARGER_TYPE_DETECT
+#if CONFIG_MTK_GAUGE_VERSION == 30
+			ret = charger_dev_enable_chg_type_det(primary_charger,
+				false);
+#else
+			ret = mtk_chr_enable_chr_type_det(false);
+#endif
+#else
+			mtk_pmic_enable_chr_type_det(false);
+#endif
 			boot_mode = get_boot_mode();
 			if (ret < 0) {
 				if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT
@@ -356,53 +347,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static int chgdet_task_threadfn(void *data)
-{
-	struct pd_manager_info *pmi = data;
-	bool attach = false;
-	int ret = 0;
-
-	dev_info(pmi->dev, "%s: ++\n", __func__);
-	while (!kthread_should_stop()) {
-		ret = wait_event_interruptible(pmi->waitq,
-					     atomic_read(&pmi->chgdet_cnt) > 0);
-		if (ret < 0) {
-			pr_info("%s: wait event been interrupted(%d)\n",
-				__func__, ret);
-			continue;
-		}
-		dev_dbg(pmi->dev, "%s: enter chgdet thread\n", __func__);
-		pm_stay_awake(pmi->dev);
-		mutex_lock(&pmi->chgdet_lock);
-		atomic_set(&pmi->chgdet_cnt, 0);
-		attach = pmi->chgdet_en;
-		mutex_unlock(&pmi->chgdet_lock);
-#ifdef CONFIG_MTK_EXTERNAL_CHARGER_TYPE_DETECT
-#if CONFIG_MTK_GAUGE_VERSION == 30
-		ret = charger_dev_enable_chg_type_det(primary_charger, attach);
-		if (ret < 0) {
-			dev_err(pmi->dev, "%s: en chgdet fail, en = %d\n",
-				__func__, attach);
-			goto out;
-		}
-#else
-		ret = mtk_chr_enable_chr_type_det(attach);
-		if (ret < 0) {
-			dev_err(pmi->dev, "%s: en chgdet fail(gm20), en = %d\n",
-				__func__, attach);
-			goto out;
-		}
-#endif
-#else
-		mtk_pmic_enable_chr_type_det(attach);
-#endif
-out:
-		pm_relax(pmi->dev);
-	}
-	dev_info(pmi->dev, "%s: --\n", __func__);
-	return 0;
-}
-
 static int rt_pd_manager_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -413,11 +357,6 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 		pr_err("%s devicd of node not exist\n", __func__);
 		return -ENODEV;
 	}
-
-	pmi = devm_kzalloc(&pdev->dev, sizeof(*pmi), GFP_KERNEL);
-	if (!pmi)
-		return -ENOMEM;
-	pmi->dev = &pdev->dev;
 
 	ret = get_boot_mode();
 	if (ret == KERNEL_POWER_OFF_CHARGING_BOOT ||
@@ -431,14 +370,12 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 	primary_charger = get_charger_by_name("primary_chg");
 	if (!primary_charger) {
 		pr_err("%s: get primary charger device failed\n", __func__);
-		ret = -ENODEV;
-		goto err_free_mem;
+		return -ENODEV;
 	}
 	chg_consumer = charger_manager_get_by_name(&pdev->dev, "charger_port1");
 	if (!chg_consumer) {
 		pr_err("%s: get charger consumer device failed\n", __func__);
-		ret = -ENODEV;
-		goto err_free_mem;
+		return -ENODEV;
 	}
 #endif /* CONFIG_MTK_GAUGE_VERSION == 30 */
 
@@ -469,28 +406,14 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 	tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
 	if (!tcpc_dev) {
 		pr_err("%s get tcpc device type_c_port0 fail\n", __func__);
-		ret = -ENODEV;
-		goto err_free_mem;
+		return -ENODEV;
 	}
 
-	/* Init Charger Detection */
-	mutex_init(&pmi->chgdet_lock);
-	atomic_set(&pmi->chgdet_cnt, 0);
-	init_waitqueue_head(&pmi->waitq);
-	device_init_wakeup(&pdev->dev, true);
-	pmi->chgdet_task = kthread_run(
-				chgdet_task_threadfn, pmi, "chgdet_thread");
-	ret = PTR_ERR_OR_ZERO(pmi->chgdet_task);
-	if (ret < 0) {
-		pr_err("%s: create chg det work fail\n", __func__);
-		goto err_free_mem;
-	}
 	pd_nb.notifier_call = pd_tcp_notifier_call;
 	ret = register_tcp_dev_notifier(tcpc_dev, &pd_nb, TCP_NOTIFY_TYPE_ALL);
 	if (ret < 0) {
 		pr_err("%s: register tcpc notifer fail\n", __func__);
-		ret = -EINVAL;
-		goto err_free_kthread;
+		return -EINVAL;
 	}
 
 
@@ -510,25 +433,10 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 
 	pr_info("%s OK!!\n", __func__);
 	return ret;
-err_free_kthread:
-	kthread_stop(pmi->chgdet_task);
-	pmi->chgdet_task = NULL;
-err_free_mem:
-	devm_kfree(&pdev->dev, pmi);
-	return ret;
 }
 
 static int rt_pd_manager_remove(struct platform_device *pdev)
 {
-	struct pd_manager_info *pmi = platform_get_drvdata(pdev);
-
-	dev_info(pmi->dev, "%s\n", __func__);
-	if (pmi->chgdet_task) {
-		kthread_stop(pmi->chgdet_task);
-		atomic_inc(&pmi->chgdet_cnt);
-		wake_up_interruptible(&pmi->waitq);
-	}
-
 	return 0;
 }
 

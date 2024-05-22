@@ -63,7 +63,6 @@ static struct reg_config dvfsrc_init_configs[][128] = {
 	/* SPMFW_LP4_2CH_3200 */
 	{
 		{ DVFSRC_EMI_REQUEST,		0x00000009 },
-		{ DVFSRC_EMI_REQUEST2,		0x00000090 },
 		{ DVFSRC_EMI_REQUEST3,		0x09000000 },
 		{ DVFSRC_EMI_QOS0,		0x00000032 },
 		{ DVFSRC_EMI_QOS1,		0x00000055 },

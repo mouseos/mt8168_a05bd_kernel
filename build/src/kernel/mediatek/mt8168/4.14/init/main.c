@@ -510,32 +510,6 @@ static void __init mm_init(void)
 	pti_init();
 }
 
-/*
-
- * Mask the serial no before logging boot command line
-
- */
-#define STRING_ANDROID_SERIALNO	"androidboot.serialno="
-static void pr_boot_command_line(void)
-{
-	static char obfuscated_command_line[COMMAND_LINE_SIZE] __initdata;
-	char *p;
-
-	strlcpy(obfuscated_command_line, boot_command_line, COMMAND_LINE_SIZE);
-
-	p = strstr(obfuscated_command_line, STRING_ANDROID_SERIALNO);
-	if (p) {
-		p += strlen(STRING_ANDROID_SERIALNO);
-		while (*p != ' ' && *p != '\0') {
-			*p = '*';
-			p++;
-		}
-	}
-
-	pr_notice("Kernel command line: %s\n", obfuscated_command_line);
-
-}
-
 asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
@@ -575,7 +549,7 @@ asmlinkage __visible void __init start_kernel(void)
 	build_all_zonelists(NULL);
 	page_alloc_init();
 
-	pr_boot_command_line();
+	pr_notice("Kernel command line: %s\n", boot_command_line);
 	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
 				  static_command_line, __start___param,

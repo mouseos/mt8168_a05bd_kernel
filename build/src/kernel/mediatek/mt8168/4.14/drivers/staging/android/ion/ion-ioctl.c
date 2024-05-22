@@ -60,10 +60,6 @@ static unsigned int ion_ioctl_dir(unsigned int cmd)
 	}
 }
 
-extern struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
-			     size_t align, unsigned int heap_id_mask,
-			     unsigned int flags, bool grab_handle);
-
 long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct ion_client *client = filp->private_data;
@@ -106,11 +102,11 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	{
 		struct ion_handle *handle;
 
-		handle = __ion_alloc(
+		handle = ion_alloc(
 						client, data.allocation.len,
 						data.allocation.align,
 						data.allocation.heap_id_mask,
-						data.allocation.flags, true);
+						data.allocation.flags);
 		if (IS_ERR(handle)) {
 			IONMSG(
 				"ION_IOC_ALLOC handle is invalid. ret = %d.\n",
@@ -119,8 +115,8 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 
 		data.allocation.handle = handle->id;
+
 		cleanup_handle = handle;
-		pass_to_user(handle);
 		break;
 	}
 	case ION_IOC_FREE:
@@ -137,7 +133,7 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				data.handle.handle, ret);
 			return PTR_ERR(handle);
 		}
-		user_ion_free_nolock(client, handle);
+		ion_free_nolock(client, handle);
 		ion_handle_put_nolock(handle);
 		mutex_unlock(&client->lock);
 		break;
@@ -176,14 +172,8 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			IONMSG("ion_import fail: fd=%d, ret=%d\n",
 			       data.fd.fd, ret);
 			return ret;
-		} else {
-			data.handle.handle = handle->id;
-			handle = pass_to_user(handle);
-			if (IS_ERR(handle)) {
-				ret = PTR_ERR(handle);
-				data.handle.handle = 0;
-			}
 		}
+		data.handle.handle = handle->id;
 		break;
 	}
 	case ION_IOC_SYNC:
@@ -210,18 +200,13 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	if (dir & _IOC_READ) {
 		if (copy_to_user((void __user *)arg, &data, _IOC_SIZE(cmd))) {
-			if (cleanup_handle) {
-				mutex_lock(&client->lock);
-				user_ion_free_nolock(client, cleanup_handle);
-				mutex_unlock(&client->lock);
-			}
+			if (cleanup_handle)
+				ion_free(client, cleanup_handle);
 			IONMSG(
 				"%s copy_to_user fail! cmd = %d, n = %d.\n",
 				__func__, cmd, _IOC_SIZE(cmd));
 			return -EFAULT;
 		}
 	}
-	if (cleanup_handle)
-		ion_handle_put(cleanup_handle);
 	return ret;
 }

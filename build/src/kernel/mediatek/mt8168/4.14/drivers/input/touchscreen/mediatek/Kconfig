@@ -101,15 +101,6 @@ config TOUCHSCREEN_MTK_NT36xxx
 	  To compile this dirver as a module, choose M here: the
 	  module will be called.
 
-config TOUCHSCREEN_MTK_FT5726
-	bool "FT5726 Touchscreen"
-	help
-	  Say Y here if you have FT5726 touch panel.
-
-	  If unsure, say N.
-	  this is a FT5726 touch driver config, you can use it
-	  if you want.
-
 config TOUCHSCREEN_MTK_GT917
 	bool "GT917 for Mediatek package"
 	help
@@ -118,5 +109,22 @@ config TOUCHSCREEN_MTK_GT917
 	  If unsure, say N.
 
 source "drivers/input/touchscreen/mediatek/GT917/Kconfig"
+
+config TOUCHSCREEN_MTK_WACOM
+	tristate "WACOM Touchscreen"
+	help
+	  Say Y here if you have WACOM touchscreen,
+	  connected to your system.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here.
+
+config TOUCHSCREEN_MTK_WACOM_DIGI
+	tristate "WACOM Digi"
+	help
+	  Say Y here if you have WACOM digi,
+	  connected to your system.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here.
+
 
 endif

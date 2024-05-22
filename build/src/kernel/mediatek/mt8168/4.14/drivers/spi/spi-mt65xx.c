@@ -164,10 +164,6 @@ static const struct mtk_spi_compatible mt8183_compat = {
 	.enhance_timing = true,
 };
 
-static const struct mtk_spi_compatible mt8168_compat = {
-	.must_tx = true,
-};
-
 /*
  * A piece of default chip info unless the platform
  * supplies it.
@@ -177,7 +173,6 @@ static const struct mtk_chip_config mtk_default_chip_info = {
 	.tx_mlsb = 1,
 	.cs_pol = 0,
 	.sample_sel = 0,
-	.deassert = 0,
 };
 
 static const struct of_device_id mtk_spi_of_match[] = {
@@ -213,9 +208,6 @@ static const struct of_device_id mtk_spi_of_match[] = {
 	},
 	{ .compatible = "mediatek,mt8183-spi",
 		.data = (void *)&mt8183_compat,
-	},
-	{ .compatible = "mediatek,mt8168-spi",
-		.data = (void *)&mt8168_compat,
 	},
 	{}
 };
@@ -378,11 +370,8 @@ static int mtk_spi_prepare_message(struct spi_master *master,
 	/* disable dma mode */
 	reg_val &= ~(SPI_CMD_TX_DMA | SPI_CMD_RX_DMA);
 
-	/* set deassert mode */
-	if (chip_config->deassert)
-		reg_val |= SPI_CMD_DEASSERT;
-	else
-		reg_val &= ~SPI_CMD_DEASSERT;
+	/* disable deassert mode */
+	reg_val &= ~SPI_CMD_DEASSERT;
 
 	writel(reg_val, mdata->base + SPI_CMD_REG);
 

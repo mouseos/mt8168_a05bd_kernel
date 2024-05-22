@@ -259,41 +259,6 @@ static ssize_t ftrace_log_combine(struct persistent_ram_zone *dest,
 	return 0;
 }
 
-#ifdef CONFIG_MTK_AEE_SAVE_LAST_ATF_LOG_CONSOLE
-#define PLAT_LOG_BUFFER_SIZE 135168
-#else
-#define PLAT_LOG_BUFFER_SIZE 4096
-#endif
-static char plat_log_buf[PLAT_LOG_BUFFER_SIZE + 1];
-static size_t plat_log_size;
-void ramoops_append_plat_log(const char *fmt, ...)
-{
-	va_list ap;
-
-	if (PLAT_LOG_BUFFER_SIZE > plat_log_size) {
-		va_start(ap, fmt);
-		plat_log_size += vscnprintf(plat_log_buf + plat_log_size, PLAT_LOG_BUFFER_SIZE - plat_log_size, fmt, ap);
-		va_end(ap);
-	} else {
-		pr_err("logging buffer size(%zu) may greater than PLAT_LOG_BUFFER_SIZE(%zu)\n",
-			plat_log_size, (size_t)PLAT_LOG_BUFFER_SIZE);
-	}
-}
-void ramoop_append_buffer(const void *buffer, size_t size)
-{
-	if (PLAT_LOG_BUFFER_SIZE > plat_log_size) {
-		if (size > PLAT_LOG_BUFFER_SIZE - plat_log_size) {
-			pr_info("append buf size(%zu) is greater than free buf size(%zu)\n",
-				size, (size_t)(PLAT_LOG_BUFFER_SIZE - plat_log_size));
-			size = PLAT_LOG_BUFFER_SIZE - plat_log_size;
-		}
-		memcpy(plat_log_buf + plat_log_size, buffer, size);
-		plat_log_size += size;
-	} else {
-		pr_err("logging buffer size(%zu) may greater than PLAT_LOG_BUFFER_SIZE(%zu)\n",
-			plat_log_size, (size_t)PLAT_LOG_BUFFER_SIZE);
-	}
-}
 static ssize_t ramoops_pstore_read(struct pstore_record *record)
 {
 	ssize_t size = 0;
@@ -395,8 +360,6 @@ static ssize_t ramoops_pstore_read(struct pstore_record *record)
 	}
 
 	size = persistent_ram_old_size(prz) - header_length;
-	if (record->type == PSTORE_TYPE_CONSOLE && plat_log_size)
-		size += (plat_log_size + 1);
 
 	/* ECC correction notice */
 	record->ecc_notice_size = persistent_ram_ecc_string(prz, NULL, 0);
@@ -407,19 +370,8 @@ static ssize_t ramoops_pstore_read(struct pstore_record *record)
 		goto out;
 	}
 
-	if (record->type == PSTORE_TYPE_CONSOLE && plat_log_size) {
-		memcpy(record->buf,
-			(char *)persistent_ram_old(prz) + header_length,
-			size - plat_log_size - 1);
-		memcpy(record->buf + (size - plat_log_size - 1),
-			plat_log_buf,
-			plat_log_size);
-		record->buf[size - 1] = '\0';
-	} else {
-		memcpy(record->buf,
-			(char *)persistent_ram_old(prz) + header_length,
-			size);
-	}
+	memcpy(record->buf, (char *)persistent_ram_old(prz) + header_length,
+	       size);
 
 	persistent_ram_ecc_string(prz, record->buf + size,
 				  record->ecc_notice_size + 1);

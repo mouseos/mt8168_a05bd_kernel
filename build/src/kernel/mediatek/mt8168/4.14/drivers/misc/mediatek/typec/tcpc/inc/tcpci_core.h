@@ -272,85 +272,6 @@ struct tcpc_ops {
 
 #define TCPC_LEGACY_CABLE_RETRY_SOLUTION	2
 
-/*
- * [BLOCK] TYPEC Connection State Definition
- */
-
-enum TYPEC_CONNECTION_STATE {
-	typec_disabled = 0,
-	typec_errorrecovery,
-
-	typec_unattached_snk,
-	typec_unattached_src,
-
-	typec_attachwait_snk,
-	typec_attachwait_src,
-
-	typec_attached_snk,
-	typec_attached_src,
-
-#ifdef CONFIG_TYPEC_CAP_TRY_SOURCE
-	/* Require : Assert Rp
-	 * Exit(-> Attached.SRC) : Detect Rd (tPDDebounce).
-	 * Exit(-> TryWait.SNK) : Not detect Rd after tDRPTry
-	 */
-	typec_try_src,
-
-	/* Require : Assert Rd
-	 * Exit(-> Attached.SNK) : Detect Rp (tCCDebounce) and Vbus present.
-	 * Exit(-> Unattached.SNK) : Not detect Rp (tPDDebounce)
-	 */
-
-	typec_trywait_snk,
-	typec_trywait_snk_pe,
-#endif
-
-#ifdef CONFIG_TYPEC_CAP_TRY_SINK
-
-	/* Require : Assert Rd
-	 * Wait for tDRPTry and only then begin monitoring CC.
-	 * Exit (-> Attached.SNK) : Detect Rp (tPDDebounce) and Vbus present.
-	 * Exit (-> TryWait.SRC) : Not detect Rp for tPDDebounce.
-	 */
-	typec_try_snk,
-
-	/*
-	 * Require : Assert Rp
-	 * Exit (-> Attached.SRC) : Detect Rd (tCCDebounce)
-	 * Exit (-> Unattached.SNK) : Not detect Rd after tDRPTry
-	 */
-
-	typec_trywait_src,
-	typec_trywait_src_pe,
-#endif	/* CONFIG_TYPEC_CAP_TRY_SINK */
-
-	typec_audioaccessory,
-	typec_debugaccessory,
-
-#ifdef CONFIG_TYPEC_CAP_DBGACC_SNK
-	typec_attached_dbgacc_snk,
-#endif	/* CONFIG_TYPEC_CAP_DBGACC_SNK */
-
-#ifdef CONFIG_TYPEC_CAP_CUSTOM_SRC
-	typec_attached_custom_src,
-#endif	/* CONFIG_TYPEC_CAP_CUSTOM_SRC */
-
-#ifdef CONFIG_TYPEC_CAP_NORP_SRC
-	typec_attached_norp_src,
-#endif	/* CONFIG_TYPEC_CAP_NORP_SRC */
-
-#ifdef CONFIG_TYPEC_CAP_ROLE_SWAP
-	typec_role_swap,
-#endif	/* CONFIG_TYPEC_CAP_ROLE_SWAP */
-
-#ifdef CONFIG_WATER_DETECTION
-	typec_water_protection_wait,
-	typec_water_protection,
-#endif /* CONFIG_WATER_DETECTION */
-
-	typec_unattachwait_pe,	/* Wait Policy Engine go to Idle */
-};
-
 struct tcpc_managed_res;
 
 /*
@@ -383,7 +304,6 @@ struct tcpc_device {
 	struct semaphore timer_enable_mask_lock;
 	spinlock_t timer_tick_lock;
 	atomic_t pending_event;
-	atomic_t suspend_pending;
 	uint64_t timer_tick;
 	uint64_t timer_enable_mask;
 	wait_queue_head_t event_loop_wait_que;

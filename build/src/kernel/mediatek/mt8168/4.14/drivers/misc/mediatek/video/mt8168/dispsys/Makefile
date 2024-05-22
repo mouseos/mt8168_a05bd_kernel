@@ -112,8 +112,4 @@ ifeq ($(strip $(CONFIG_MTK_PQ_COLOR_MODE)),"DISP")
 else ifeq ($(strip $(CONFIG_MTK_PQ_COLOR_MODE)),"OFF")
     ccflags-y += -DDISP_COLOR_ON
 endif
-
-ifeq ($(CONFIG_FREE_FB_BUFFER), y)
-    ccflags-y += -DFREE_FB_BUFFER
-endif
 # EOF

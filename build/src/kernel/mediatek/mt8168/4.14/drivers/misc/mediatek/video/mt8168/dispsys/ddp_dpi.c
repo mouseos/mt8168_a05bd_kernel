@@ -312,7 +312,7 @@ enum DPI_STATUS ddp_dpi_ConfigDualEdge(struct cmdqRecStruct *cmdq,
 	struct DPI_REG_OUTPUT_SETTING ctrl = DPI_REG->OUTPUT_SETTING;
 	struct DPI_REG_DDR_SETTING ddr_setting = DPI_REG->DDR_SETTING;
 
-	ctrl.DUAL_EDGE_SEL = enable;
+	ctrl.DUAL_EDGE_SEL = mode;
 	DPI_OUTREGBIT(cmdq, struct DPI_REG_OUTPUT_SETTING,
 			DPI_REG->OUTPUT_SETTING, DUAL_EDGE_SEL,
 			ctrl.DUAL_EDGE_SEL);
@@ -748,6 +748,8 @@ int ddp_dpi_config(enum DISP_MODULE_ENUM module,
 					dpi_config->ssc_disable);
 				ddp_dpi_lvds_config(module, dpi_config->format,
 						    NULL);
+				DPI_OUTREG32(NULL, DISPSYS_DPI_BASE + 0x50,
+					0x1);
 				DPI_OUTREG32(NULL, DISPSYS_CONFIG_BASE + 0xfdc,
 					0x00030000);
 			} else {
@@ -784,11 +786,9 @@ int ddp_dpi_config(enum DISP_MODULE_ENUM module,
 				dpi_config->hsync_front_porch);
 
 		if (dpi_config->lvds_tx_en)
-			ddp_dpi_ConfigDualEdge(cmdq_handle, false,
-				dpi_config->i2x_edge);
+			ddp_dpi_ConfigDualEdge(cmdq_handle, false, 1);
 		else
-			ddp_dpi_ConfigDualEdge(cmdq_handle, true,
-				dpi_config->i2x_edge);
+			ddp_dpi_ConfigDualEdge(cmdq_handle, true, 1);
 
 		_Enable_Interrupt();
 
@@ -1144,17 +1144,20 @@ int ddp_dpi_ioctl(enum DISP_MODULE_ENUM module, void *cmdq_handle,
 	int ret = 0;
 	enum DDP_IOCTL_NAME ioctl = (enum DDP_IOCTL_NAME) ioctl_cmd;
 
+	struct disp_ddp_path_config *config_info =
+		(struct disp_ddp_path_config *) params;
+	struct LCM_DPI_PARAMS *dpi_cfg =
+		&config_info->dispif_config.dpi;
+	if (dpi_cfg->lvds_tx_en)
+		DPI_OUTREG32(NULL, DISPSYS_CONFIG_BASE + 0xfdc, 0x00030000);
+	else
+		DPI_OUTREG32(NULL, DISPSYS_CONFIG_BASE + 0xfdc, 1);
+
 	DPI_REG = (struct DPI_REGS *) ddp_get_module_va(DISP_MODULE_DPI);
-	DPI_OUTREG32(NULL, DISPSYS_CONFIG_BASE + 0xfdc, 0x1);
 
 	switch (ioctl) {
 	case DDP_DPI_FACTORY_TEST:
 		{
-			struct disp_ddp_path_config *config_info =
-				(struct disp_ddp_path_config *) params;
-			struct LCM_DPI_PARAMS *dpi_cfg =
-				&config_info->dispif_config.dpi;
-
 			ddp_dpi_power_on(module, NULL);
 			ddp_dpi_stop(module, NULL);
 			ddp_dpi_reset(module, NULL);

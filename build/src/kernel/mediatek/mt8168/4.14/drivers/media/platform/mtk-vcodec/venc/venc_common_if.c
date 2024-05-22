@@ -248,6 +248,7 @@ static int venc_encode_frame_final(struct venc_inst *inst,
 	return ret;
 }
 
+
 static int venc_init(struct mtk_vcodec_ctx *ctx, unsigned long *handle)
 {
 	int ret = 0;
@@ -336,7 +337,7 @@ static int venc_encode(unsigned long handle,
 
 	switch (opt) {
 	case VENC_START_OPT_ENCODE_SEQUENCE_HEADER: {
-		unsigned int bs_size_hdr = 0;
+		unsigned int bs_size_hdr;
 
 		ret = venc_encode_header(inst, bs_buf, &bs_size_hdr);
 		if (ret)
@@ -413,10 +414,11 @@ static void venc_get_free_buffers(struct venc_inst *inst,
 
 static int venc_get_param(unsigned long handle,
 						  enum venc_get_param_type type,
-			  void *out)
+						  void *out)
 {
 	int ret = 0;
 	struct venc_inst *inst = (struct venc_inst *)handle;
+
 	if (inst == NULL)
 		return -EINVAL;
 
@@ -439,6 +441,12 @@ static int venc_get_param(unsigned long handle,
 		*(int *)out = inst->vsi->config.roi_rc_qp;
 		break;
 	}
+	case GET_PARAM_REFBUF_FRAME_NUM: {
+		if (inst->vsi == NULL || out == NULL)
+			return -EINVAL;
+		*(int *)out = inst->vsi->config.maxrefbufFrameNum;
+		break;
+	}
 	default:
 		mtk_vcodec_err(inst, "invalid get parameter type=%d", type);
 		ret = -EINVAL;
@@ -455,6 +463,7 @@ static int venc_set_param(unsigned long handle,
 	int i;
 	int ret = 0;
 	struct venc_inst *inst = (struct venc_inst *)handle;
+
 	if (inst == NULL)
 		return -EINVAL;
 
@@ -476,6 +485,7 @@ static int venc_set_param(unsigned long handle,
 		inst->vsi->config.roion = enc_prm->roion;
 		inst->vsi->config.scenario = enc_prm->scenario;
 		inst->vsi->config.prependheader = enc_prm->prependheader;
+		inst->vsi->config.maxrefpnum = enc_prm->maxrefpnum;
 
 		if (inst->vcu_inst.id == IPI_VENC_H264 ||
 		    inst->vcu_inst.id == IPI_VENC_HYBRID_H264) {

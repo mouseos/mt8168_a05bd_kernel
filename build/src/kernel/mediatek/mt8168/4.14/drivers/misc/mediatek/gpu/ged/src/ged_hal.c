@@ -326,7 +326,7 @@ static ssize_t ged_vsync_offset_enable_write_entry(const char __user *pszBuffer,
 	*/
 
 	char acBuffer[GED_HAL_DEBUGFS_SIZE];
-	int aint32Indx[NUM_TOKEN] = {0};
+	int aint32Indx[NUM_TOKEN];
 	char *pcCMD;
 	char *pcValue;
 	int value;
@@ -452,11 +452,11 @@ static ssize_t ged_vsync_offset_level_write_entry(
 	*/
 
 	char acBuffer[GED_HAL_DEBUGFS_SIZE];
-	int aint32Indx[NUM_TOKEN] = {0};
+	int aint32Indx[NUM_TOKEN];
 	char *pcCMD;
 	char *pcValue;
 	int i;
-	int i32VsyncOffsetLevel = 0;
+	int i32VsyncOffsetLevel;
 	int ret;
 
 	if (!((0 < uiCount) && (uiCount < GED_HAL_DEBUGFS_SIZE - 1)))
@@ -685,9 +685,9 @@ static void *ged_dvfs_gpu_util_seq_next(struct seq_file *psSeqFile, void *pvData
 static int ged_dvfs_gpu_util_seq_show(struct seq_file *psSeqFile, void *pvData)
 {
 	if (pvData != NULL) {
-		unsigned int loading = 0;
-		unsigned int block = 0;
-		unsigned int idle = 0;
+		unsigned int loading;
+		unsigned int block;
+		unsigned int idle;
 		mtk_get_gpu_loading(&loading);
 		mtk_get_gpu_block(&block);
 		mtk_get_gpu_idle(&idle);

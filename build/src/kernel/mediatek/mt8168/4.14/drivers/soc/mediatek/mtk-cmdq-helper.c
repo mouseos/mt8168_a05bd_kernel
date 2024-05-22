@@ -418,6 +418,41 @@ s32 cmdq_pkt_add_cmd_buffer(struct cmdq_pkt *pkt)
 }
 EXPORT_SYMBOL(cmdq_pkt_add_cmd_buffer);
 
+s32 cmdq_pkt_copy_cmd_buf(struct cmdq_pkt *pkt, void *src, const u32 size)
+{
+	u32 remaind_cmd_size = size;
+	u32 copy_size = 0;
+	void *va;
+	struct cmdq_pkt_buffer *buf;
+
+	while (remaind_cmd_size > 0) {
+		/* extend buffer to copy more instruction */
+		if (!pkt->avail_buf_size) {
+			if (cmdq_pkt_add_cmd_buffer(pkt) < 0)
+				return -ENOMEM;
+		}
+
+		copy_size = pkt->avail_buf_size > remaind_cmd_size ?
+			remaind_cmd_size : pkt->avail_buf_size;
+		buf = list_last_entry(&pkt->buf, typeof(*buf), list_entry);
+		va = buf->va_base + CMDQ_CMD_BUFFER_SIZE - pkt->avail_buf_size;
+		memcpy(va, src + size - remaind_cmd_size, copy_size);
+
+		/* update last instruction position */
+		pkt->avail_buf_size -= copy_size;
+		pkt->cmd_buf_size += copy_size;
+		remaind_cmd_size -= copy_size;
+
+		cmdq_log(
+			"buf size:%zu size:%zu available:%zu va:0x%p",
+			pkt->buf_size, pkt->cmd_buf_size, pkt->avail_buf_size,
+			va);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(cmdq_pkt_copy_cmd_buf);
+
 void cmdq_mbox_destroy(struct cmdq_client *client)
 {
 	mbox_free_channel(client->chan);
@@ -652,88 +687,27 @@ s32 cmdq_pkt_write_value(struct cmdq_pkt *pkt, u8 subsys,
 }
 EXPORT_SYMBOL(cmdq_pkt_write_value);
 
-/* cmdq secure ta need to limit gce not to write the address outside
- * the allow list maintained in cmdq ta.
- * To acheive this purpose, cmdq ta add a new feature:
- * scan all gce instructions passed from kernel,
- * and analysis which physical address gce is going to write.
- * cmdq ta will use a static variable SPR_CACHE to store the spr value
- * passed form gce instruction. GCE op MOVE & MASK & ASSING ... will assign
- * value to GCE spr, and cmdq ta will store this value to SPR_CACHE.
- * When GCE op is READ/WRITE, physical address = SPR_CACHE << 16 | offset.
- * cmdq ta use this way to calculate the physical address GCE is going to write.
- *
- * In current code flow. user want to write addr to src_reg_idx with mask.
- * If mask == 0xFFFFFFFF, means write all 32 bits without mask. driver don't
- * need to insert op MASK instruction.
- * If mask != 0xFFFFFFFF, means need to insert MASK instruction.
- * when cmdq ta parse MASK op, SPR_CACHE will be assigned to mask.
- *
- * If CMDQ_CODE_MASK is after
- * cmdq_pkt_assign_command(pkt, dst_reg_idx, CMDQ_GET_ADDR_HIGH(addr))
- * When parse WRITE op
- * cmdq_pkt_append_command(pkt, 0, src_reg_idx,
-	CMDQ_GET_ADDR_LOW(addr), dst_reg_idx,
-	CMDQ_IMMEDIATE_VALUE, CMDQ_REG_TYPE,
-	CMDQ_IMMEDIATE_VALUE, op);
- * cmdq ta will thought SPR_CACHE = mask not CMDQ_GET_ADDR_HIGH(addr),
- * and PA = mask << 16 | CMDQ_GET_ADDR_LOW(addr)
- * not PA = CMDQ_GET_ADDR_HIGH(addr) << 16 | CMDQ_GET_ADDR_LOW(addr).
- * cmdq ta will got the wrong PA address which is not in allow list, and report
- * error.
- *
- * So we need to adjust mask op in front of assign op to make sure cmdq ta will
- * parse the right physical address and pass the check in cmdq ta.
- */
 s32 cmdq_pkt_write_reg_addr(struct cmdq_pkt *pkt, dma_addr_t addr,
 	u16 src_reg_idx, u32 mask)
 {
-	s32 err = 0;
+	s32 err;
 	const u16 dst_reg_idx = CMDQ_SPR_FOR_TEMP;
-	enum cmdq_code op = CMDQ_CODE_WRITE_S;
-
-	if (mask != 0xffffffff) {
-		err = cmdq_pkt_append_command(pkt, CMDQ_GET_ARG_C(~mask),
-			CMDQ_GET_ARG_B(~mask), 0, 0, 0, 0, 0, CMDQ_CODE_MASK);
-		if (err != 0)
-			return err;
-
-		op = CMDQ_CODE_WRITE_S_W_MASK;
-	}
 
 	err = cmdq_pkt_assign_command(pkt, dst_reg_idx,
 		CMDQ_GET_ADDR_HIGH(addr));
 	if (err != 0)
 		return err;
 
-	if (CMDQ_GET_ADDR_LOW(addr)) {
-		return cmdq_pkt_append_command(pkt, 0, src_reg_idx,
-			CMDQ_GET_ADDR_LOW(addr), dst_reg_idx,
-			CMDQ_IMMEDIATE_VALUE, CMDQ_REG_TYPE,
-			CMDQ_IMMEDIATE_VALUE, op);
-	}
-
-	return cmdq_pkt_append_command(pkt, 0,
-		src_reg_idx, dst_reg_idx, 0,
-		CMDQ_IMMEDIATE_VALUE, CMDQ_REG_TYPE, CMDQ_REG_TYPE, op);
+	return cmdq_pkt_store_value_reg(pkt, dst_reg_idx,
+		CMDQ_GET_ADDR_LOW(addr), src_reg_idx, mask);
 }
 EXPORT_SYMBOL(cmdq_pkt_write_reg_addr);
 
 s32 cmdq_pkt_write_value_addr(struct cmdq_pkt *pkt, dma_addr_t addr,
 	u32 value, u32 mask)
 {
-	s32 err = 0;
+	s32 err;
 	const u16 dst_reg_idx = CMDQ_SPR_FOR_TEMP;
-	enum cmdq_code op = CMDQ_CODE_WRITE_S;
-
-	if (mask != 0xffffffff) {
-		err = cmdq_pkt_append_command(pkt, CMDQ_GET_ARG_C(~mask),
-			CMDQ_GET_ARG_B(~mask), 0, 0, 0, 0, 0, CMDQ_CODE_MASK);
-		if (err != 0)
-			return err;
-
-		op = CMDQ_CODE_WRITE_S_W_MASK;
-	}
 
 	/* assign bit 47:16 to spr temp */
 	err = cmdq_pkt_assign_command(pkt, dst_reg_idx,
@@ -741,12 +715,60 @@ s32 cmdq_pkt_write_value_addr(struct cmdq_pkt *pkt, dma_addr_t addr,
 	if (err != 0)
 		return err;
 
-	return cmdq_pkt_append_command(pkt, CMDQ_GET_ARG_C(value),
-		CMDQ_GET_ARG_B(value), CMDQ_GET_ADDR_LOW(addr),
-		dst_reg_idx, CMDQ_IMMEDIATE_VALUE,
-		CMDQ_IMMEDIATE_VALUE, CMDQ_IMMEDIATE_VALUE, op);
+	return cmdq_pkt_store_value(pkt, dst_reg_idx, CMDQ_GET_ADDR_LOW(addr),
+		value, mask);
 }
 EXPORT_SYMBOL(cmdq_pkt_write_value_addr);
+
+s32 cmdq_pkt_store_value(struct cmdq_pkt *pkt, u16 indirect_dst_reg_idx,
+	u16 dst_addr_low, u32 value, u32 mask)
+{
+	int err = 0;
+	enum cmdq_code op = CMDQ_CODE_WRITE_S;
+
+	if (mask != 0xffffffff) {
+		err = cmdq_pkt_append_command(pkt, CMDQ_GET_ARG_C(~mask),
+			CMDQ_GET_ARG_B(~mask), 0, 0, 0, 0, 0, CMDQ_CODE_MASK);
+		if (err != 0)
+			return err;
+
+		op = CMDQ_CODE_WRITE_S_W_MASK;
+	}
+
+	return cmdq_pkt_append_command(pkt, CMDQ_GET_ARG_C(value),
+		CMDQ_GET_ARG_B(value), dst_addr_low,
+		indirect_dst_reg_idx, CMDQ_IMMEDIATE_VALUE,
+		CMDQ_IMMEDIATE_VALUE, CMDQ_IMMEDIATE_VALUE, op);
+}
+EXPORT_SYMBOL(cmdq_pkt_store_value);
+
+s32 cmdq_pkt_store_value_reg(struct cmdq_pkt *pkt, u16 indirect_dst_reg_idx,
+	u16 dst_addr_low, u16 indirect_src_reg_idx, u32 mask)
+{
+	int err = 0;
+	enum cmdq_code op = CMDQ_CODE_WRITE_S;
+
+	if (mask != 0xffffffff) {
+		err = cmdq_pkt_append_command(pkt, CMDQ_GET_ARG_C(~mask),
+			CMDQ_GET_ARG_B(~mask), 0, 0, 0, 0, 0, CMDQ_CODE_MASK);
+		if (err != 0)
+			return err;
+
+		op = CMDQ_CODE_WRITE_S_W_MASK;
+	}
+
+	if (dst_addr_low) {
+		return cmdq_pkt_append_command(pkt, 0, indirect_src_reg_idx,
+			dst_addr_low, indirect_dst_reg_idx,
+			CMDQ_IMMEDIATE_VALUE, CMDQ_REG_TYPE,
+			CMDQ_IMMEDIATE_VALUE, op);
+	}
+
+	return cmdq_pkt_append_command(pkt, 0,
+		indirect_src_reg_idx, indirect_dst_reg_idx, 0,
+		CMDQ_IMMEDIATE_VALUE, CMDQ_REG_TYPE, CMDQ_REG_TYPE, op);
+}
+EXPORT_SYMBOL(cmdq_pkt_store_value_reg);
 
 s32 cmdq_pkt_write_indriect(struct cmdq_pkt *pkt, struct cmdq_base *clt_base,
 	dma_addr_t addr, u16 src_reg_idx, u32 mask)

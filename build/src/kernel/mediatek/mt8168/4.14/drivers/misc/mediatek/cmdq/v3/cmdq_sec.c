@@ -27,7 +27,6 @@
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/sched/clock.h>
-#include "cmdq_sec_iwc_common.h"
 
 #ifdef CMDQ_MET_READY
 #include <linux/met_drv.h>
@@ -371,17 +370,6 @@ static void cmdq_sec_fill_isp_meta(struct cmdqRecStruct *task,
 #endif
 }
 
-bool cmdq_sec_is_disp_scenario(enum CMDQ_SCENARIO_ENUM scenario)
-{
-	switch (scenario) {
-	case CMDQ_SCENARIO_PRIMARY_DISP:
-	case CMDQ_SCENARIO_PRIMARY_MEMOUT:
-		return true;
-	default:
-		return false;
-	}
-}
-
 s32 cmdq_sec_fill_iwc_command_msg_unlocked(
 	s32 iwc_cmd, void *task_ptr, s32 thread, void *iwc_ptr,
 	void *iwcex_ptr)
@@ -429,20 +417,8 @@ s32 cmdq_sec_fill_iwc_command_msg_unlocked(
 		iwc->command.metadata.enginesNeedPortSecurity =
 			cmdq_sec_get_secure_engine(
 					task->secData.enginesNeedPortSecurity);
-	iwc->command.metadata.enginesDisablePortSecurity =
-		cmdq_sec_get_secure_engine(
-		task->secData.enginesDisablePortSecurity);
-	iwc->command.metadata.enginesDisableDAPC =
-		cmdq_sec_get_secure_engine(
-		task->secData.enginesDisableDAPC);
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
 		iwc->command.metadata.secMode = task->secData.secMode;
-		if (cmdq_sec_is_disp_scenario(task->scenario)
-			&& (iwc->command.metadata.secMode < 0 ||
-			iwc->command.metadata.secMode > CMDQ_IWC_MDP_USER_MODE)) {
-			CMDQ_ERR("%s 1 secMode = %d\n", __func__,
-				iwc->command.metadata.secMode);
-		}
 #endif
 	} else {
 		CMDQ_MSG("[SEC]iwc is null\n");
@@ -450,12 +426,6 @@ s32 cmdq_sec_fill_iwc_command_msg_unlocked(
 
 	/* Currently, no use for iwcex */
 	cmdq_sec_fill_isp_meta(task, iwc, iwcex);
-	if (cmdq_sec_is_disp_scenario(task->scenario)
-		&& (iwc->command.metadata.secMode < 0 ||
-		iwc->command.metadata.secMode > CMDQ_IWC_MDP_USER_MODE)) {
-		CMDQ_ERR("%s 2 secMode = %d\n", __func__,
-			iwc->command.metadata.secMode);
-	}
 
 	if (thread == CMDQ_INVALID_THREAD) {
 		/* relase resource, or debug function will go here */
@@ -1713,7 +1683,9 @@ static int cmdq_resume(struct device *dev)
 {
 	struct cmdq *cmdq = dev_get_drvdata(dev);
 
+	#if 0
 	WARN_ON(clk_prepare(cmdq->clock) < 0);
+	#endif
 	cmdq->suspended = false;
 	return 0;
 }
@@ -2377,7 +2349,9 @@ static int cmdq_probe(struct platform_device *pdev)
 		"cmdq_timeout_wq");
 
 	platform_set_drvdata(pdev, cmdq);
+	#if 0
 	WARN_ON(clk_prepare(cmdq->clock) < 0);
+	#endif
 
 	/* TODO: should remove? */
 	g_cmdq = cmdq;

@@ -71,22 +71,22 @@ irqreturn_t mtk_vcodec_dec_irq_handler(int irq, void *priv)
 
 	ctx = mtk_vcodec_get_curr_ctx(dev);
 
+	/* check if HW active or not */
+	cg_status = readl(dev->dec_reg_base[0]);
+	if ((cg_status & MTK_VDEC_HW_ACTIVE) != 0) {
+		mtk_v4l2_err("DEC ISR, VDEC active is not 0x0 (0x%08x)",
+					 cg_status);
+		return IRQ_HANDLED;
+	}
+
+	dec_done_status = readl(vdec_misc_addr);
+	ctx->irq_status = dec_done_status;
+	if ((dec_done_status & MTK_VDEC_IRQ_STATUS_DEC_SUCCESS) !=
+		MTK_VDEC_IRQ_STATUS_DEC_SUCCESS)
+		return IRQ_HANDLED;
+
+	/* clear interrupt */
 	if (ctx->dec_params.svp_mode != INHOUSE_TEE) {
-		/* check if HW active or not */
-		cg_status = readl(dev->dec_reg_base[0]);
-		if ((cg_status & MTK_VDEC_HW_ACTIVE) != 0) {
-			mtk_v4l2_err("DEC ISR, VDEC active is not 0x0 (0x%08x)",
-						 cg_status);
-			return IRQ_HANDLED;
-		}
-
-		dec_done_status = readl(vdec_misc_addr);
-		ctx->irq_status = dec_done_status;
-		if ((dec_done_status & MTK_VDEC_IRQ_STATUS_DEC_SUCCESS) !=
-			MTK_VDEC_IRQ_STATUS_DEC_SUCCESS)
-			return IRQ_HANDLED;
-
-		/* clear interrupt */
 		writel((readl(vdec_misc_addr) | MTK_VDEC_IRQ_CFG),
 			   dev->dec_reg_base[VDEC_MISC] + MTK_VDEC_IRQ_CFG_REG);
 		writel((readl(vdec_misc_addr) & ~MTK_VDEC_IRQ_CLR),

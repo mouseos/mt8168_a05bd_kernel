@@ -245,14 +245,6 @@ static int mtk_thermal_get_tz_idx(char *type)
 		return MTK_THERMAL_SENSOR_DCTM;
 	else if (strncmp(type, "mtktscharger", 12) == 0)
 		return MTK_THERMAL_SENSOR_CHARGER;
-#ifdef CONFIG_COOLER_ADAPTIVE_BTS
-	else if (strncmp(type, "mtkts_bts0", 10) == 0)
-		return MTK_THERMAL_SENSOR_BTS0;
-	else if (strncmp(type, "mtkts_bts1", 10) == 0)
-		return MTK_THERMAL_SENSOR_BTS1;
-	else if (strncmp(type, "mtkts_bts2", 10) == 0)
-		return MTK_THERMAL_SENSOR_BTS2;
-#endif
 
 	return -1;
 }

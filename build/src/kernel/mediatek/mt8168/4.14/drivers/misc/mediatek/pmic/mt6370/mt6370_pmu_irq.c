@@ -211,7 +211,11 @@ static irqreturn_t mt6370_pmu_irq_handler(int irq, void *priv)
 
 	pr_info_ratelimited("%s\n", __func__);
 	pm_runtime_get_sync(chip->dev);
-
+	ret = mt6370_pmu_reg_write(chip, MT6370_PMU_REG_IRQMASK, 0xfe);
+	if (ret < 0) {
+		dev_err(chip->dev, "mask irq indicators fail\n");
+		goto out_irq_handler;
+	}
 	ret = mt6370_pmu_reg_read(chip, MT6370_PMU_REG_IRQIND);
 	if (ret < 0) {
 		dev_err(chip->dev, "read irq indicator fail\n");
@@ -251,7 +255,11 @@ static irqreturn_t mt6370_pmu_irq_handler(int irq, void *priv)
 		dev_err(chip->dev, "read irq mask fail\n");
 		goto out_irq_handler;
 	}
-
+	ret = mt6370_pmu_reg_write(chip, MT6370_PMU_REG_IRQMASK, 0x00);
+	if (ret < 0) {
+		dev_err(chip->dev, "unmask irq indicators fail\n");
+		goto out_irq_handler;
+	}
 	for (i = 0; i < 16; i++) {
 		stat_chg[i] = stat_old[i] ^ stat_new[i];
 		valid_chg[i] = (stat_new[i] & mt6370_irqr_filter[i]) |
@@ -305,13 +313,11 @@ void mt6370_pmu_irq_suspend(struct mt6370_pmu_chip *chip)
 {
 	if (device_may_wakeup(chip->dev))
 		enable_irq_wake(chip->irq);
-	disable_irq(chip->irq);
 }
 EXPORT_SYMBOL(mt6370_pmu_irq_suspend);
 
 void mt6370_pmu_irq_resume(struct mt6370_pmu_chip *chip)
 {
-	enable_irq(chip->irq);
 	if (device_may_wakeup(chip->dev))
 		disable_irq_wake(chip->irq);
 }
@@ -355,7 +361,17 @@ int mt6370_pmu_irq_register(struct mt6370_pmu_chip *chip)
 	ret = mt6370_pmu_irq_init(chip);
 	if (ret < 0)
 		return ret;
-
+	ret = gpio_request_one(pdata->intr_gpio, GPIOF_IN,
+				"mt6370_pmu_irq_gpio");
+	if (ret < 0) {
+		dev_err(chip->dev, "%s: gpio request fail\n", __func__);
+		return ret;
+	}
+	ret = gpio_to_irq(pdata->intr_gpio);
+	if (ret < 0) {
+		dev_err(chip->dev, "%s: irq mapping fail\n", __func__);
+		goto out_pmu_irq;
+	}
 	chip->irq_domain = irq_domain_add_linear(chip->dev->of_node,
 						 MT6370_PMU_IRQ_EVT_MAX,
 						 &mt6370_pmu_irq_domain_ops,
@@ -365,15 +381,13 @@ int mt6370_pmu_irq_register(struct mt6370_pmu_chip *chip)
 		ret = -EINVAL;
 		goto out_pmu_irq;
 	}
-	chip->irq = pdata->intr_gpio;
+	chip->irq = ret;
 	ret = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
 					mt6370_pmu_irq_handler,
-					IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					"mt6370_pmu_irq", chip);
-	if (ret < 0) {
-		dev_err(chip->dev, "%s: request threaded irq fail\n", __func__);
+	if (ret < 0)
 		goto out_pmu_irq;
-	}
 	device_init_wakeup(chip->dev, true);
 	return 0;
 out_pmu_irq:

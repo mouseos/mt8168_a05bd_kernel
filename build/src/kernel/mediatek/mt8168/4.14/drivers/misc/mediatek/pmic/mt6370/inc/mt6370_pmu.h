@@ -17,7 +17,6 @@
 #define __LINUX_MFD_MT6370_PMU_H
 
 #include <mt-plat/rt-regmap.h>
-#include <mt-plat/mtk_charger.h>
 #include <linux/rtmutex.h>
 #include <linux/interrupt.h>
 
@@ -124,7 +123,6 @@ struct mt6370_pmu_chip {
 #define MT6370_PMU_REG_CHGHIDDENCTRL8	(0x37)
 #define MT6370_PMU_REG_CHGHIDDENCTRL9	(0x38)
 #define MT6370_PMU_REG_CHGHIDDENCTRL15	(0x3E)
-#define MT6370_PMU_CHG_HIDDEN_CTRL22	(0x45)
 #define MT6370_PMU_REG_CHGSTAT		(0x4A)
 #define MT6370_PMU_REG_CHGNTC		(0x4B)
 #define MT6370_PMU_REG_ADCDATAH		(0x4C)

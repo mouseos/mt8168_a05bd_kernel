@@ -145,13 +145,11 @@ static void __mrdump_reboot_stop_all(struct mrdump_crash_record *crash_record)
 
 #else
 
-
 /* Generic IPI support */
 static atomic_t waiting_for_crash_ipi;
 
 static void mrdump_stop_noncore_cpu(void *unused)
 {
-#if !defined(CONFIG_AEE_DEBUG_CRASH_NOTES_BYPASS_MRDUMP_CB)
 	struct mrdump_crash_record *crash_record = &mrdump_cblock->crash_record;
 	struct pt_regs regs;
 	void *creg;
@@ -172,24 +170,8 @@ static void mrdump_stop_noncore_cpu(void *unused)
 	dis_D_inner_fL1L2();
 	while (1)
 		cpu_relax();
-#else
-	struct pt_regs regs;
-	int cpu = get_HW_cpuid();
-
-	mrdump_save_current_backtrace(&regs);
-
-	crash_save_cpu((struct pt_regs *)&regs, cpu);
-
-	local_fiq_disable();
-	local_irq_disable();
-
-	dis_D_inner_fL1L2();
-	while (1)
-		cpu_relax();
-#endif
 }
 
-#if !defined(CONFIG_AEE_DEBUG_CRASH_NOTES_BYPASS_MRDUMP_CB)
 static void __mrdump_reboot_stop_all(struct mrdump_crash_record *crash_record)
 {
 	unsigned long msecs;
@@ -210,29 +192,6 @@ static void __mrdump_reboot_stop_all(struct mrdump_crash_record *crash_record)
 			pr_notice("Non-crashing CPUs did not react to IPI\n");
 	}
 }
-#else
-static void __mrdump_reboot_stop_all(void)
-{
-	unsigned long msecs;
-
-	atomic_set(&waiting_for_crash_ipi, num_online_cpus() - 1);
-	smp_call_function(mrdump_stop_noncore_cpu, NULL, false);
-
-	msecs = 1000; /* Wait at most a second for the other cpus to stop */
-	while ((atomic_read(&waiting_for_crash_ipi) > 0) && msecs) {
-		mdelay(1);
-		msecs--;
-	}
-	if (atomic_read(&waiting_for_crash_ipi) > 0) {
-		if (aee_in_nested_panic())
-			aee_nested_printf(
-				"Non-crashing CPUs did not react to IPI\n");
-		else
-			pr_notice("Non-crashing CPUs did not react to IPI\n");
-	}
-}
-
-#endif
 
 #endif
 
@@ -242,7 +201,7 @@ void mrdump_save_ctrlreg(void)
 	void *creg;
 	int cpu = get_HW_cpuid();
 
-	if (mrdump_cblock && cpu >= 0) {
+	if (mrdump_cblock) {
 		crash_record = &mrdump_cblock->crash_record;
 		creg = (void *)&crash_record->cpu_creg[cpu];
 		mrdump_save_control_register(creg);
@@ -269,7 +228,6 @@ void mrdump_save_per_cpu_reg(int cpu, struct pt_regs *regs)
 void __mrdump_create_oops_dump(enum AEE_REBOOT_MODE reboot_mode,
 		struct pt_regs *regs, const char *msg, ...)
 {
-#if !defined(CONFIG_AEE_DEBUG_CRASH_NOTES_BYPASS_MRDUMP_CB)
 	va_list ap;
 	struct mrdump_crash_record *crash_record;
 	void *creg;
@@ -308,29 +266,10 @@ void __mrdump_create_oops_dump(enum AEE_REBOOT_MODE reboot_mode,
 		/* FIXME: Check reboot_mode is valid */
 			crash_record->reboot_mode = reboot_mode;
 	}
-#else
-		int cpu;
-
-		local_irq_disable();
-		local_fiq_disable();
-
-#if defined(CONFIG_SMP)
-		__mrdump_reboot_stop_all();
-#endif
-
-		cpu = get_HW_cpuid();
-		crashing_cpu = cpu;
-		/* null regs, no register dump */
-		if (regs) {
-			crash_save_cpu(regs, cpu);
-		}
-
-#endif
 }
 
 int __init mrdump_full_init(void)
 {
-#if !defined(CONFIG_AEE_DEBUG_CRASH_NOTES_BYPASS_MRDUMP_CB)
 	if (mrdump_cblock == NULL) {
 		memset(mrdump_lk, 0, sizeof(mrdump_lk));
 		pr_notice("%s: MT-RAMDUMP no control block\n", __func__);
@@ -353,16 +292,6 @@ int __init mrdump_full_init(void)
 	mrdump_cblock->enabled = MRDUMP_ENABLE_COOKIE;
 	__inner_flush_dcache_all();
 	pr_info("%s: MT-RAMDUMP enabled done\n", __func__);
-
-#else
-	/* Allocate memory for saving cpu registers. */
-	crash_notes = alloc_percpu(note_buf_t);
-	if (!crash_notes) {
-		pr_notice("MT-RAMDUMP: Memory allocation for saving cpu register failed\n");
-		return -ENOMEM;
-	}
-
-#endif
 	return 0;
 }
 

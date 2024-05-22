@@ -14,6 +14,7 @@ config DRM_MEDIATEK
 	select MTK_SMI
 	select MTK_DISPLAY_CMDQ
 	select MTK_CMDQ
+	select VIDEOMODE_HELPERS
 	help
 	  Choose this option if you have a Mediatek SoCs.
 	  The module will be called mediatek-drm

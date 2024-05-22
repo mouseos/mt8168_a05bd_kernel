@@ -159,10 +159,7 @@ struct iwcCmdqMetadata_t {
 	struct iwcCmdqAddrMetadata_t addrList[CMDQ_IWC_MAX_ADDR_LIST_LENGTH];
 
 	uint64_t enginesNeedDAPC;
-	uint64_t enginesDisableDAPC;
 	uint64_t enginesNeedPortSecurity;
-	uint64_t enginesDisablePortSecurity;
-
 #ifdef CONFIG_MTK_IN_HOUSE_TEE_SUPPORT
 	uint32_t secMode;
 #endif

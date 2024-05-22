@@ -187,6 +187,7 @@ static void mmc_blk_put(struct mmc_blk_data *md)
 	md->usage--;
 	if (md->usage == 0) {
 		int devidx = mmc_get_devidx(md->disk);
+		blk_cleanup_queue(md->queue.queue);
 		ida_simple_remove(&mmc_blk_ida, devidx);
 		put_disk(md->disk);
 		kfree(md);
@@ -4242,21 +4243,15 @@ static int mmc_blk_suspend(struct device *dev)
 	if (ret)
 		goto out;
 	/*
-	 * MTK modify
-	 * In some cases suspend with CMD5, before
-	 * suspend emmc could switch to other partition.
 	 * Make sure partition is the main one when
 	 * suspend.
 	 */
 	if (md) {
-		mmc_get_card(card);
 		ret = mmc_blk_part_switch(card, md->part_type);
-		mmc_put_card(card);
 		if (ret)
 			pr_info("%s: error %d during suspend\n",
 				md->disk->disk_name, ret);
 	}
-	/* MTK modify end */
 out:
 		return ret;
 

@@ -226,8 +226,8 @@ struct wakeup_source isp_wake_lock;
 struct wake_lock isp_wake_lock;
 #endif
 
-static struct wakeup_source *clk_wake_lock;
-
+struct ISP_DAPC_REG_STRUCT gDAPCReg;
+static int gSecEnable;
 static int g_bWaitLock;
 /*
  * static void __iomem *g_isp_base_dase;
@@ -3546,12 +3546,9 @@ static void ISP_EnableClock(bool En)
 		/*log_inf("CCF:prepare_enable clk"); */
 		spin_lock(&(IspInfo.SpinLockClock));
 		G_u4EnableClockCount++;
-		if (G_u4EnableClockCount == 1)
-			__pm_stay_awake(clk_wake_lock);
 		spin_unlock(&(IspInfo.SpinLockClock));
 		Prepare_Enable_ccf_clock();
 #endif
-
 	} else {                /* Disable clock. */
 #if defined(CONFIG_MTK_CLKMGR) || defined(EP_NO_CLKMGR)
 		spin_lock(&(IspInfo.SpinLockClock));
@@ -3577,8 +3574,6 @@ static void ISP_EnableClock(bool En)
 		/*log_inf("CCF:disable_unprepare clk\n"); */
 		spin_lock(&(IspInfo.SpinLockClock));
 		G_u4EnableClockCount--;
-		if (G_u4EnableClockCount == 0)
-			__pm_relax(clk_wake_lock);
 		spin_unlock(&(IspInfo.SpinLockClock));
 		Disable_Unprepare_ccf_clock();
 #endif
@@ -7053,9 +7048,13 @@ static signed int ISP_SOF_Buf_Get(enum eISPIrq irqT, union CQ_RTBC_FBC *pFbc,
 		}
 		if (irqT == _IRQ) {
 			unsigned int _tmp = ISP_RD32(TG_REG_ADDR_GRAB_W);
-			unsigned int _p1_sel =
-				ISP_RD32(ISP_INNER_REG_ADDR_CAM_CTRL_SEL_P1);
+			unsigned int _p1_sel;
 
+			if (gSecEnable)
+				_p1_sel = gDAPCReg.CAM_CTL_SEL_P1;
+			else
+				_p1_sel =
+				ISP_RD32(ISP_INNER_REG_ADDR_CAM_CTRL_SEL_P1);
 			pstRTBuf->ring_buf[ch_imgo].data[imgo_idx].image.xsize =
 				ISP_RD32(ISP_INNER_REG_ADDR_IMGO_XSIZE) &
 				0x3FFF;
@@ -7074,14 +7073,29 @@ static signed int ISP_SOF_Buf_Get(enum eISPIrq irqT, union CQ_RTBC_FBC *pFbc,
 				.image.bus_size =
 				(ISP_RD32(ISP_INNER_REG_ADDR_IMGO_STRIDE) >>
 				16) & 0x03;
-			pstRTBuf->ring_buf[ch_imgo].data[imgo_idx].image.fmt =
-				(ISP_RD32(ISP_INNER_REG_ADDR_FMT_SEL_P1) &
-				0xF000) >> 12;
-			pstRTBuf->ring_buf[ch_imgo]
-				.data[imgo_idx]
-				.image.pxl_id =
-				(ISP_RD32(ISP_INNER_REG_ADDR_FMT_SEL_P1) &
+			if  (gSecEnable) {
+				pstRTBuf->ring_buf[ch_imgo].data[imgo_idx]
+				.image.fmt =
+				(gDAPCReg.CAM_CTL_FMT_SEL_P1 &
+					0xF000) >> 12;
+				pstRTBuf->ring_buf[ch_imgo]
+					.data[imgo_idx]
+					.image.pxl_id =
+					(gDAPCReg.CAM_CTL_FMT_SEL_P1 &
 				0x03);
+			} else {
+				pstRTBuf->ring_buf[ch_imgo].data[imgo_idx]
+					.image.fmt =
+					(ISP_RD32(
+					ISP_INNER_REG_ADDR_FMT_SEL_P1) &
+					0xF000) >> 12;
+				pstRTBuf->ring_buf[ch_imgo]
+					.data[imgo_idx]
+					.image.pxl_id =
+					(ISP_RD32(
+					ISP_INNER_REG_ADDR_FMT_SEL_P1) &
+					0x03);
+			}
 			pstRTBuf->ring_buf[ch_imgo]
 				.data[imgo_idx]
 				.image.m_num_0 =
@@ -7145,9 +7159,17 @@ static signed int ISP_SOF_Buf_Get(enum eISPIrq irqT, union CQ_RTBC_FBC *pFbc,
 				.image.bus_size =
 				(ISP_RD32(ISP_INNER_REG_ADDR_RRZO_STRIDE) >>
 				16) & 0x03;
-			pstRTBuf->ring_buf[ch_rrzo].data[rrzo_idx].image.fmt =
-				(ISP_RD32(ISP_INNER_REG_ADDR_FMT_SEL_P1) &
+			if (gSecEnable) {
+				pstRTBuf->ring_buf[ch_rrzo].data[rrzo_idx]
+					.image.fmt =
+					(gDAPCReg.CAM_CTL_FMT_SEL_P1 &
+					0x30) >> 4;
+			} else {
+				pstRTBuf->ring_buf[ch_rrzo].data[rrzo_idx]
+				.image.fmt = (ISP_RD32(
+				ISP_INNER_REG_ADDR_FMT_SEL_P1) &
 				0x30) >> 4;
+			}
 			pstRTBuf->ring_buf[ch_rrzo]
 				.data[rrzo_idx]
 				.image.pxl_id =
@@ -7246,8 +7268,13 @@ if (IspInfo.DebugMask & ISP_DBG_INT_2) {
 #if (ISP_RAW_D_SUPPORT == 1)
 		else {
 			unsigned int _tmp = ISP_RD32(TG2_REG_ADDR_GRAB_W);
-			unsigned int _p1_sel =
-				ISP_RD32(ISP_INNER_REG_ADDR_CAM_CTRL_SEL_P1_D);
+			unsigned int _p1_sel;
+
+			if (gSecEnable)
+				_p1_sel = gDAPCReg.CAM_CTL_SEL_P1_D;
+			else
+				_p1_sel = ISP_RD32(
+				ISP_INNER_REG_ADDR_CAM_CTRL_SEL_P1_D);
 
 			pstRTBuf->ring_buf[ch_imgo].data[imgo_idx].image.xsize =
 				ISP_RD32(ISP_INNER_REG_ADDR_IMGO_D_XSIZE) &
@@ -7267,14 +7294,28 @@ if (IspInfo.DebugMask & ISP_DBG_INT_2) {
 				.image.bus_size =
 				(ISP_RD32(ISP_INNER_REG_ADDR_IMGO_D_STRIDE) >>
 				16) & 0x03;
-			pstRTBuf->ring_buf[ch_imgo].data[imgo_idx].image.fmt =
-				(ISP_RD32(ISP_INNER_REG_ADDR_FMT_SEL_P1_D) &
+			if (gSecEnable) {
+				pstRTBuf->ring_buf[ch_imgo].data[imgo_idx]
+					.image.fmt =
+					(gDAPCReg.CAM_CTL_FMT_SEL_P1_D &
+					0xF000) >> 12;
+				pstRTBuf->ring_buf[ch_imgo]
+					.data[imgo_idx]
+					.image.pxl_id =
+					(gDAPCReg.CAM_CTL_FMT_SEL_P1_D &
+					0x03);
+			} else{
+				pstRTBuf->ring_buf[ch_imgo].data[imgo_idx]
+				.image.fmt = (ISP_RD32(
+				ISP_INNER_REG_ADDR_FMT_SEL_P1_D) &
 				0xF000) >> 12;
-			pstRTBuf->ring_buf[ch_imgo]
+				pstRTBuf->ring_buf[ch_imgo]
 				.data[imgo_idx]
 				.image.pxl_id =
 				(ISP_RD32(ISP_INNER_REG_ADDR_FMT_SEL_P1_D) &
 				0x03);
+			}
+
 			pstRTBuf->ring_buf[ch_imgo]
 				.data[imgo_idx]
 				.image.m_num_0 =
@@ -7330,9 +7371,17 @@ if (IspInfo.DebugMask & ISP_DBG_INT_2) {
 				.image.bus_size =
 				(ISP_RD32(ISP_INNER_REG_ADDR_RRZO_D_STRIDE) >>
 				16) & 0x03;
-			pstRTBuf->ring_buf[ch_rrzo].data[rrzo_idx].image.fmt =
+			if (gSecEnable) {
+				pstRTBuf->ring_buf[ch_rrzo].data[rrzo_idx]
+					.image.fmt =
+					(gDAPCReg.CAM_CTL_FMT_SEL_P1_D &
+					0x30) >> 4;
+			} else{
+				pstRTBuf->ring_buf[ch_rrzo].data[rrzo_idx]
+				.image.fmt =
 				(ISP_RD32(ISP_INNER_REG_ADDR_FMT_SEL_P1_D) &
 				0x30) >> 4;
+			}
 			pstRTBuf->ring_buf[ch_rrzo]
 				.data[rrzo_idx]
 				.image.pxl_id =
@@ -8731,7 +8780,6 @@ static signed int ISP_ED_BufQue_CTRL_FUNC(struct ISP_ED_BUFQUE_STRUCT param)
 			if (param.p2burstQIdx == 0) {
 				if (P2_EDBUF_MList_FirstBufIdx ==
 					P2_EDBUF_MList_LastBufIdx
-				    && P2_EDBUF_MList_FirstBufIdx != -1
 				    && P2_EDBUF_MgrList
 				    [P2_EDBUF_MList_FirstBufIdx].p2dupCQIdx ==
 				    -1) {
@@ -11724,11 +11772,6 @@ static long ISP_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 			current->comm, current->pid, current->tgid);
 		return -EFAULT;
 	}
-	if ((void __user *)Param == NULL) {
-		log_notice("Param is NULL\n");
-		if (Cmd != ISP_RESET_VSYNC_CNT)
-			return -EFAULT;
-	}
 	/*      */
 	pUserInfo = (struct ISP_USER_INFO_STRUCT *)(pFile->private_data);
 	/*      */
@@ -12334,6 +12377,15 @@ static long ISP_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 		}
 		break;
 	/*      */
+	case ISP_SET_DAPC_REG:
+		if (copy_from_user(&gDAPCReg, (void *)Param,
+			sizeof(struct ISP_DAPC_REG_STRUCT)) == 0) {
+			gSecEnable = 1;
+		} else {
+			log_err("copy_from_user	failed");
+			Ret = -EFAULT;
+		}
+		break;
 	case ISP_DUMP_REG:
 		Ret = ISP_DumpReg();
 		break;
@@ -13122,6 +13174,7 @@ static long ISP_ioctl_compat(struct file *filp, unsigned int cmd,
 	case ISP_QUERY_REGSCEN:
 	case ISP_UPDATE_BURSTQNUM:
 	case ISP_QUERY_BURSTQNUM:
+	case ISP_SET_DAPC_REG:
 	case ISP_DUMP_REG:
 	case ISP_SET_USER_PID:
 	/* structure    use     unsigned long , but     the     code is unsigned
@@ -13413,6 +13466,10 @@ static signed int ISP_release(struct inode *pInode, struct file *pFile)
 	}
 	/* reset */
 	/*      */
+	if (gSecEnable) {
+		memset(&gDAPCReg, 0, sizeof(struct ISP_DAPC_REG_STRUCT));
+		gSecEnable = 0;
+	}
 	for (i = 0; i < IRQ_USER_NUM_MAX; i++) {
 		FirstUnusedIrqUserKey = 1;
 		memset((void *)IrqUserKey_UserInfo[i].userName, '\0',
@@ -13691,6 +13748,7 @@ static signed int ISP_probe(struct platform_device *pDev)
 		return -ENXIO;
 	}
 
+	gSecEnable = 0;
 	new_count = nr_camisp_devs + 1;
 	cam_isp_devs =
 		krealloc(cam_isp_devs,
@@ -13868,7 +13926,6 @@ static signed int ISP_probe(struct platform_device *pDev)
 #else
 	wake_lock_init(&isp_wake_lock, WAKE_LOCK_SUSPEND, "isp_lock_wakelock");
 #endif
-	clk_wake_lock = wakeup_source_register("isp_clk_wakelock");
 
 	/*      */
 	INIT_WORK(&IspInfo.ScheduleWorkVD, ISP_ScheduleWork_VD);
@@ -14449,8 +14506,9 @@ EXPORT_SYMBOL(ISP_MCLK3_EN);
 
 int32_t ISP_MDPClockOnCallback(uint64_t engineFlag)
 {
+	/* log_dbg("ISP_MDPClockOnCallback"); */
 	log_dbg("+MDPEn:%d", G_u4EnableClockCount);
-	/* ISP_EnableClock(MTRUE); */
+	ISP_EnableClock(MTRUE);
 
 	return 0;
 }
@@ -14475,7 +14533,8 @@ int32_t ISP_MDPResetCallback(uint64_t engineFlag)
 
 int32_t ISP_MDPClockOffCallback(uint64_t engineFlag)
 {
-	/* ISP_EnableClock(MFALSE); */
+	/* log_dbg("ISP_MDPClockOffCallback"); */
+	ISP_EnableClock(MFALSE);
 	log_dbg("-MDPEn:%d", G_u4EnableClockCount);
 	return 0;
 }

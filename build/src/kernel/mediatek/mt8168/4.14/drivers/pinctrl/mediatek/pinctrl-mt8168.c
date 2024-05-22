@@ -1400,6 +1400,78 @@ static const struct mtk_pin_spec_pupd_set_samereg mt8168_spec_pupd[] = {
 	MTK_PIN_PUPD_SPEC_SR(109, 0x0F0, 11, 10, 9, 0),
 };
 
+static const struct mtk_pin_info mt8168_pin_info_rsel[] = {
+	MTK_PIN_INFO(57, 0x060, 0, 2, 0),
+	MTK_PIN_INFO(58, 0x060, 2, 2, 0),
+	MTK_PIN_INFO(59, 0x060, 4, 2, 0),
+	MTK_PIN_INFO(60, 0x060, 6, 2, 0),
+	MTK_PIN_INFO(61, 0x060, 8, 2, 0),
+	MTK_PIN_INFO(62, 0x060, 10, 2, 0),
+	MTK_PIN_INFO(63, 0x060, 12, 2, 0),
+	MTK_PIN_INFO(64, 0x060, 14, 2, 0),
+};
+/* i2c mode pin set pull r1r0 resistance in rsel register */
+static void mtk_rsel_r1r0_set_samereg(struct mtk_pinctrl *pctl,
+		struct regmap *regmap,
+		const struct mtk_pin_info *rsel_infos,
+		unsigned int info_num, unsigned int pin,
+		unsigned int r1r0)
+{
+	unsigned int i;
+	unsigned int reg_addr;
+	unsigned int bit_r0, bit_r1;
+	unsigned int reg_value;
+	const struct mtk_pin_info *rsel_pin;
+	bool find = false;
+
+	for (i = 0; i < info_num; i++) {
+		if (pin == rsel_infos[i].pin) {
+			find = true;
+			break;
+		}
+	}
+
+	if (find) {
+
+		rsel_pin = rsel_infos + i;
+
+		if (rsel_pin->ip_num != 0)
+			regmap = pctl->regmap1;
+		reg_addr = rsel_pin->offset;
+		bit_r0 = BIT(rsel_pin->bit);
+		bit_r1 = BIT(rsel_pin->bit + 1);
+
+		switch (r1r0) {
+		case MTK_RSEL_SET_R1R0_00:
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, ~bit_r0 & reg_value);
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, ~bit_r1 & reg_value);
+			break;
+		case MTK_RSEL_SET_R1R0_01:
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, bit_r0 | reg_value);
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, ~bit_r1 & reg_value);
+			break;
+		case MTK_RSEL_SET_R1R0_10:
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, ~bit_r0 & reg_value);
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, bit_r1 | reg_value);
+			break;
+		case MTK_RSEL_SET_R1R0_11:
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, bit_r0 | reg_value);
+			regmap_read(regmap, reg_addr, &reg_value);
+			regmap_write(regmap, reg_addr, bit_r1 | reg_value);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 static int mtk_pinctrl_set_gpio_ies(struct mtk_pinctrl *pctl,
 	int pin, bool enable)
 {
@@ -1431,6 +1503,10 @@ static int mt8168_spec_pull_set(struct mtk_pinctrl *pctl,
 		struct regmap *regmap, unsigned int pin,
 		unsigned char align, bool isup, unsigned int r1r0)
 {
+	if (r1r0 >= MTK_RSEL_SET_R1R0_00 && r1r0 <= MTK_RSEL_SET_R1R0_11)
+		mtk_rsel_r1r0_set_samereg(pctl, regmap, mt8168_pin_info_rsel,
+			ARRAY_SIZE(mt8168_pin_info_rsel), pin, r1r0);
+
 	return mtk_pctrl_spec_pull_set_samereg(pctl, regmap, mt8168_spec_pupd,
 		ARRAY_SIZE(mt8168_spec_pupd), pin, align, isup, r1r0);
 }

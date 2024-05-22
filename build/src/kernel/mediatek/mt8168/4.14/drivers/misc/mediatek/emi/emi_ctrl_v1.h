@@ -20,7 +20,6 @@ struct emi_info_t {
 	unsigned int rk_num;
 	unsigned int rank_size[MAX_RK];
 };
-
 extern void bwl_init(struct platform_driver *emi_ctrl);
 extern void mpu_init(
 	struct platform_driver *emi_ctrl, struct platform_device *pdev);

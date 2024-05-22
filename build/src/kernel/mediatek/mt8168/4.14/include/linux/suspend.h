@@ -10,8 +10,6 @@
 #include <linux/freezer.h>
 #include <asm/errno.h>
 
-#define AMZN_MODIFICATION 1
-
 #ifdef CONFIG_VT
 extern void pm_set_vt_switch(int);
 #else
@@ -563,9 +561,5 @@ static inline void page_key_memorize(unsigned long *pfn) {}
 static inline void page_key_write(void *address) {}
 
 #endif /* !CONFIG_ARCH_SAVE_PAGE_KEYS */
-
-#if AMZN_MODIFICATION
-bool pm_resume_from_machine_suspend(void);
-#endif
 
 #endif /* _LINUX_SUSPEND_H */

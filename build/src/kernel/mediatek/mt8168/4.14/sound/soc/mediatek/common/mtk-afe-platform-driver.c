@@ -102,14 +102,16 @@ static snd_pcm_uframes_t mtk_afe_pcm_pointer
 
 	ret = regmap_read(regmap, reg_ofs_cur, &hw_ptr);
 	if (ret || hw_ptr == 0) {
-		dev_err(dev, "%s hw_ptr err\n", __func__);
+		dev_info(dev, "%s hw_ptr err %d;0x%x;0x%x;\n",
+			__func__, ret, hw_ptr, reg_ofs_cur);
 		pcm_ptr_bytes = 0;
 		goto POINTER_RETURN_FRAMES;
 	}
 
 	ret = regmap_read(regmap, reg_ofs_base, &hw_base);
 	if (ret || hw_base == 0) {
-		dev_err(dev, "%s hw_ptr err\n", __func__);
+		dev_info(dev, "%s hw_base err %d;0x%x;0x%x;\n",
+			__func__, ret, hw_base, reg_ofs_cur);
 		pcm_ptr_bytes = 0;
 		goto POINTER_RETURN_FRAMES;
 	}
@@ -120,37 +122,9 @@ POINTER_RETURN_FRAMES:
 	return bytes_to_frames(substream->runtime, pcm_ptr_bytes);
 }
 
-/* calculate the target DMA-buffer position to be written/read */
-static void *get_dma_ptr(struct snd_pcm_runtime *runtime,
-			   int channel, unsigned long hwoff)
-{
-	return runtime->dma_area + hwoff +
-		channel * (runtime->dma_bytes / runtime->channels);
-}
-
-static int mtk_pcm_copy_user(struct snd_pcm_substream *substream, int channel,
-				    unsigned long hwoff, void *buf,
-				    unsigned long bytes)
-{
-	bool is_playback = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
-	if (is_playback) {
-		if (copy_from_user_toio(get_dma_ptr(substream->runtime,
-					channel, hwoff),
-					(void __user *)buf, bytes))
-			return -EFAULT;
-	} else {
-		if (copy_to_user_fromio((void __user *)buf,
-					 get_dma_ptr(substream->runtime,
-					 channel, hwoff), bytes))
-			return -EFAULT;
-	}
-	return 0;
-}
-
 const struct snd_pcm_ops mtk_afe_pcm_ops = {
 	.ioctl = snd_pcm_lib_ioctl,
 	.pointer = mtk_afe_pcm_pointer,
-	.copy_user = mtk_pcm_copy_user,
 };
 EXPORT_SYMBOL_GPL(mtk_afe_pcm_ops);
 

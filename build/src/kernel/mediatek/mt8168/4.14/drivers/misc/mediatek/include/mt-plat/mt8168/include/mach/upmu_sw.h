@@ -11,8 +11,8 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 
-#ifndef _MT_PMIC_UPMU_SW_MT6357_H_
-#define _MT_PMIC_UPMU_SW_MT6357_H_
+#ifndef _MT_PMIC_UPMU_SW_MT6390_H_
+#define _MT_PMIC_UPMU_SW_MT6390_H_
 
 #include <mach/upmu_hw.h>
 
@@ -48,6 +48,15 @@
 #define FG_BAT_PLUGOUT_NO NO_USE_0_6
 
 #define TMA_KEY 0x9CA8
+/* =============================================================================
+ * Chip version define
+ * =============================================================================
+ */
+enum {
+	PMIC_MT6357_CHIP_ID = 0x57,
+	PMIC_MT6390_CHIP_ID = 0x90
+};
+
 /* =============================================================================
  * Low battery level define
  * =============================================================================
@@ -371,10 +380,10 @@ extern void PMIC_INIT_SETTING_V1(void);
 extern int do_ptim_ex(bool isSuspend, unsigned int *bat, signed int *cur);
 
 /*=============================================================================
- * Others: only for mt6357
+ * Others: only for mt6390
  *=============================================================================
  */
 extern unsigned int PMIC_LP_CHIP_VER(void);
 extern unsigned int is_pmic_mrv(void);
 
-#endif /* _MT_PMIC_UPMU_SW_MT6357_H_ */
+#endif /* _MT_PMIC_UPMU_SW_MT6390_H_ */

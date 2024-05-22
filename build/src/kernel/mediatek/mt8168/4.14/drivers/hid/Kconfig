@@ -309,16 +309,6 @@ config HID_GFRM
 	---help---
 	Support for Google Fiber TV Box remote controls
 
-config HID_KAWARTHA
-	tristate "Kawartha BT Keyboard"
-	depends on HID
-	default HID
-	---help---
-	Support for Kawartha KB
-	This custom driver handle Vendor specific events.
-
-	Say Y here if you want to enable support for Kawartha KB
-
 config HID_HOLTEK
 	tristate "Holtek HID devices"
 	depends on USB_HID

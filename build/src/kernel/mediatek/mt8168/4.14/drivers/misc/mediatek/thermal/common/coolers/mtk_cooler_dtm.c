@@ -44,11 +44,6 @@
 #include "vpu_dvfs.h"
 #endif
 #endif
-#ifdef CONFIG_AMAZON_METRICS_LOG
-#include <linux/metricslog.h>
-#define TSCPU_METRICS_STR_LEN 128
-#define PREFIX "thermaltscpu:def"
-#endif
 /*=============================================================
  *Local variable definition
  *=============================================================
@@ -284,19 +279,7 @@ static int dtm_cpu_set_cur_state
 (struct thermal_cooling_device *cdev, unsigned long state)
 {
 	int i = 0;
-#ifdef CONFIG_AMAZON_METRICS_LOG
-	char buf[TSCPU_METRICS_STR_LEN];
 
-	for (i = 0; i < Num_of_OPP; i++) {
-		if ((!strcmp(cdev->type, &cooler_name[i * 20])) &&
-			cl_dev_state[i] != state) {
-			snprintf(buf, TSCPU_METRICS_STR_LEN,
-				"%s:cpumonitor_%s_cooler_state=%ld;CT;1:NR",
-				PREFIX, cdev->type, state);
-			log_to_metrics(ANDROID_LOG_INFO, "ThermalEvent", buf);
-		}
-	}
-#endif
 	for (i = 0; i < Num_of_OPP; i++) {
 		if (!strcmp(cdev->type, &cooler_name[i * 20])) {
 			cl_dev_state[i] = state;

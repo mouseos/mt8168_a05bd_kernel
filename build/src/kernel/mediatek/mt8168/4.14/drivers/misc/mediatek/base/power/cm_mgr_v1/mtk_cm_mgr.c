@@ -361,6 +361,10 @@ static void cm_mgr_perf_timer_fn(unsigned long data)
 
 void cm_mgr_perf_set_status(int enable)
 {
+#if defined(CONFIG_MACH_MT8168)
+	if (is_8168_dram_type_pcddr())
+		return;
+#endif
 	cm_mgr_perf_platform_set_force_status(enable);
 
 	if (cm_mgr_perf_force_enable)
@@ -390,6 +394,10 @@ void cm_mgr_perf_set_status(int enable)
 
 void cm_mgr_perf_set_force_status(int enable)
 {
+#if defined(CONFIG_MACH_MT8168)
+	if (is_8168_dram_type_pcddr())
+		return;
+#endif
 	if (enable != cm_mgr_perf_force_enable) {
 		cm_mgr_perf_force_enable = enable;
 		if (enable == 0) {
@@ -496,6 +504,10 @@ void check_cm_mgr_status_internal(void)
 	int level;
 	unsigned long flags;
 
+#if defined(CONFIG_MACH_MT8168)
+	if (is_8168_dram_type_pcddr())
+		return;
+#endif
 	if (!is_dvfsrc_enabled())
 		return;
 
@@ -782,6 +794,9 @@ void check_cm_mgr_status(unsigned int cluster, unsigned int freq)
 #if defined(CONFIG_MACH_MT8168)
 	struct mtk_cpu_dvfs *p;
 
+	if (is_8168_dram_type_pcddr())
+		return;
+
 	p = id_to_cpu_dvfs(cluster);
 	freq_idx = search_available_freq_idx(p, freq, 0);
 #else
@@ -811,6 +826,10 @@ void check_cm_mgr_status(unsigned int cluster, unsigned int freq)
 
 void cm_mgr_enable_fn(int enable)
 {
+#if defined(CONFIG_MACH_MT8168)
+	if (is_8168_dram_type_pcddr())
+		return;
+#endif
 	cm_mgr_enable = enable;
 
 	if (!cm_mgr_enable)

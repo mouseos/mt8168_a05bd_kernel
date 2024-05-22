@@ -69,8 +69,25 @@ struct cmdqWriteAddressStruct {
 
 #define CMDQ_IOCTL_LOCK_MUTEX   _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 1, int)
 #define CMDQ_IOCTL_UNLOCK_MUTEX _IOR(CMDQ_IOCTL_MAGIC_NUMBER, 2, int)
+#define CMDQ_IOCTL_EXEC_COMMAND _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 3, \
+	struct cmdqCommandStruct)
 #define CMDQ_IOCTL_QUERY_USAGE  _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 4, \
 	struct cmdqUsageInfoStruct)
+
+/*  */
+/* Async operations */
+/*  */
+#define CMDQ_IOCTL_ASYNC_JOB_EXEC _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 5, \
+	struct cmdqJobStruct)
+#define CMDQ_IOCTL_ASYNC_JOB_WAIT_AND_CLOSE _IOR(CMDQ_IOCTL_MAGIC_NUMBER, 6, \
+	struct cmdqJobResultStruct)
+
+#define CMDQ_IOCTL_ALLOC_WRITE_ADDRESS _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 7, \
+	struct cmdqWriteAddressStruct)
+#define CMDQ_IOCTL_FREE_WRITE_ADDRESS _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 8, \
+	struct cmdqWriteAddressStruct)
+#define CMDQ_IOCTL_READ_ADDRESS_VALUE _IOW(CMDQ_IOCTL_MAGIC_NUMBER, 9, \
+	struct cmdqReadAddressStruct)
 
 /*  */
 /* Chip capability query. output parameter is a bit field. */

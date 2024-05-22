@@ -38,7 +38,6 @@ static struct layering_rule_info_t *l_rule_info;
 static struct layering_rule_ops *l_rule_ops;
 static int ext_id_tuning(struct disp_layer_info *disp_info, int disp_idx);
 static unsigned int adaptive_dc_request;
-#define DISP_LAYER_RULE_MAX_NUM 1024
 
 static struct {
 	enum LYE_HELPER_OPT opt;
@@ -498,14 +497,15 @@ static void print_disp_info_to_log_buffer(struct disp_layer_info *disp_info)
 	n = 0;
 	n += snprintf(status_buf + n, LOGGER_BUFFER_SIZE - n,
 		"Last hrt query data[start]\n");
-	for (i = 0 ; i < 2 ; i++) {
+	for (i = 0 ; (i < 2) && (LOGGER_BUFFER_SIZE - n > 64) ; i++) {
 		n += snprintf(status_buf + n, LOGGER_BUFFER_SIZE - n,
 			"HRT D%d/M%d/LN%d/hrt_num:%d/G(%d,%d)/fps:%d\n",
 			i, disp_info->disp_mode[i], disp_info->layer_num[i],
 			disp_info->hrt_num,	disp_info->gles_head[i],
 			disp_info->gles_tail[i], l_rule_info->primary_fps);
 
-		for (j = 0 ; j < disp_info->layer_num[i] ; j++) {
+		for (j = 0 ; (j < disp_info->layer_num[i])
+			&& (LOGGER_BUFFER_SIZE - n > 64) ; j++) {
 			layer_info = &disp_info->input_config[i][j];
 			n += snprintf(status_buf + n, LOGGER_BUFFER_SIZE - n,
 				"L%d->%d/of(%d,%d)/wh(%d,%d)/fmt:0x%x\n",
@@ -656,221 +656,6 @@ static int _rollback_to_GPU_top_down(struct disp_layer_info *disp_info,
 	return available_ovl_num;
 }
 
-/* Return value:
- * >=0 : find sec_layer and return index
- * -1  : no sec_layer in the whole layer
- */
-static int get_sec_layer_index(struct disp_layer_info *disp_info, int disp_idx)
-{
-	int i = 0;
-	int sec_layer_index = -1;
-	struct layer_config *layer_info;
-
-	for (i = 0 ; i < disp_info->layer_num[disp_idx] ; i++) {
-		layer_info = &disp_info->input_config[disp_idx][i];
-		if (layer_info->secure_layer == 1) {
-			if (sec_layer_index == -1) {
-				sec_layer_index = i; /* mark layer index at the first time when we find a sec layer */
-			} else {
-				return -1; /* only support one sec layer */
-			}
-
-		}
-	}
-
-	return sec_layer_index;
-}
-
-static bool is_sec_layer_gpu_must(struct disp_layer_info *disp_info, int disp_idx, int sec_layer_index)
-{
-	if (disp_info->gles_head[disp_idx] == -1 || disp_info->gles_tail[disp_idx] == -1)
-		return false; /* no gpu must layer */
-
-	if (sec_layer_index >= disp_info->gles_head[disp_idx] && sec_layer_index <= disp_info->gles_tail[disp_idx])
-		return true;
-
-	return false;
-}
-
-enum CHECK_TYPE {
-	BOTTOM_UP = 0,
-	TOP_DOWN,
-	TYPE_NUM,
-};
-/* Restrictions:
- * 1. only for primary display
- * 2. only support one sec layer
- * 3. sec layer is not gpu must
- * 4. special handle doesn't support extended layer
- *
- * Return value:
- * 0   : find a special handling flow and set available_ovl_number
- * <0  : can't handle, no special handling flow
- */
-static int do_special_handling_for_sec_layer(struct disp_layer_info *disp_info, int disp_idx, int ovl_hw_limit, int *pavailable_ovl_num)
-{
-	int ret = -EINVAL;
-	int available_ovl_num;
-	int sec_layer_index;
-	int temp_gles_head, temp_gles_tail;
-	bool available[TYPE_NUM] = {false, false};
-	bool has_gles_layer = false;
-
-	if (disp_idx != HRT_PRIMARY)
-		return ret;
-
-	sec_layer_index = get_sec_layer_index(disp_info, disp_idx);
-	if (sec_layer_index == -1)
-		return ret;
-
-	if (is_sec_layer_gpu_must(disp_info, disp_idx, sec_layer_index))
-		return ret;
-
-	/*                               layer_num <= ovl_hw_limit | layer_num > ovl_hw_limit
-	 * -----------------------------------------------------------------------------------
-	 * gpu must = 0                 |   normal rollback flow   |        case 1(need gpu to blend)
-	 * -----------------------------------------------------------------------------------
-	 * gpu must = 1                 |   normal rollback flow   |        case 2(need gpu to blend + gpu must)
-	 * sec_layer doesn't in gpu must|                          |
-	 * -----------------------------------------------------------------------------------
-	 */
-	if (disp_info->layer_num[disp_idx] <= ovl_hw_limit)
-		return ret; /* normal rollback flow can handle this case */
-
-	if (disp_info->gles_head[disp_idx] != -1 && disp_info->gles_tail[disp_idx] != -1)
-		has_gles_layer = true;
-
-	/* meet ovl hw_limit from bottom to up | meet ovl hw_limit from top to down
-	 *                                     |
-	 * gpu -- layer_num -1                 | ovl -- layer_num -1
-	 * gpu -- layer_num -2                 | ovl -- layer_num -2 (sec_layer)
-	 * gpu -- 9                            | ovl -- 9
-	 * gpu -- 8                            | ovl -- 8
-	 * gpu -- 7                            | ovl -- 7
-	 * gpu -- 6                            | gpu -- 6
-	 * gpu -- 5                            | gpu -- 5
-	 * ovl -- 4                            | gpu -- 4
-	 * ovl -- 3                            | gpu -- 3
-	 * ovl -- 2 (sec_layer)                | gpu -- 2
-	 * ovl -- 1                            | gpu -- 1
-	 * ovl -- 0                            | gpu -- 0
-	 */
-	if (sec_layer_index + 1 <= ovl_hw_limit - 1)
-		available[BOTTOM_UP] = true; /* meet ovl hw_limit from bottom to up */
-
-	if (disp_info->layer_num[disp_idx] - sec_layer_index <= ovl_hw_limit - 1)
-		available[TOP_DOWN] = true; /* meet ovl hw_limit from top to down */
-
-	if (!available[BOTTOM_UP] && !available[TOP_DOWN])
-		return ret;
-
-	/* layer_num > ovl_hw_limit, need gpu to blend */
-	if (!has_gles_layer) { /* case 1 */
-		if (available[BOTTOM_UP]) {
-			available_ovl_num = 0;
-			disp_info->gles_head[disp_idx] = ovl_hw_limit - 1;
-			disp_info->gles_tail[disp_idx] = disp_info->layer_num[disp_idx] - 1;
-			*pavailable_ovl_num = available_ovl_num;
-			return 0;
-		}
-		if (available[TOP_DOWN]) {
-			available_ovl_num = 0;
-			disp_info->gles_head[disp_idx] = 0;
-			disp_info->gles_tail[disp_idx] = disp_info->layer_num[disp_idx] - ovl_hw_limit;
-			*pavailable_ovl_num = available_ovl_num;
-			return 0;
-		}
-	} else { /* case 2 */
-		if (available[BOTTOM_UP]) {
-			temp_gles_head = ovl_hw_limit - 1;
-			temp_gles_tail = disp_info->layer_num[disp_idx] - 1;
-			/*
-			 * gpu -- layer_num -1 ->temp_gles_tail
-			 * gpu -- layer_num -2
-			 * gpu -- 9
-			 * gpu -- 8
-			 * gpu -- 7 ---------------------------->gles_must_head (pos3)
-			 * gpu -- 6
-			 * gpu -- 5 ------------>temp_gles_head
-			 * ovl -- 4 ---------------------------->gles_must_head (pos2)
-			 * ovl -- 3
-			 * ovl -- 2 (sec_layer)
-			 * ovl -- 1 ---------------------------->gles_must_head (pos1)
-			 * ovl -- 0
-			 */
-			if (disp_info->gles_head[disp_idx] < sec_layer_index) { /* pos1 */
-				/* bottom up can't handle this case, try top down */
-			} else if (disp_info->gles_head[disp_idx] >= temp_gles_head) { /* pos3 */
-				/* gpu for blending can cover gpu must , perfect !!! */
-				available_ovl_num = 0;
-				disp_info->gles_head[disp_idx] = temp_gles_head;
-				disp_info->gles_tail[disp_idx] = temp_gles_tail;
-				*pavailable_ovl_num = available_ovl_num;
-				return 0;
-			} else { /* pos2 */
-				/* gpu for blending can't cover gpu must */
-				available_ovl_num = ovl_hw_limit - 1 - disp_info->gles_head[disp_idx];
-				if (disp_info->gles_tail[disp_idx] < temp_gles_tail - available_ovl_num) {
-					disp_info->gles_tail[disp_idx] = temp_gles_tail - available_ovl_num;
-					available_ovl_num = 0;
-				} else {
-					available_ovl_num -= temp_gles_tail - disp_info->gles_tail[disp_idx];
-				}
-				*pavailable_ovl_num = available_ovl_num;
-				return 0;
-			}
-
-		}
-		if (available[TOP_DOWN]) {
-			temp_gles_head = 0;
-			temp_gles_tail = disp_info->layer_num[disp_idx] - ovl_hw_limit;
-			/*
-			 * ovl -- layer_num -1 ----------------->gles_must_tail (pos1)
-			 * ovl -- layer_num -2 (sec_layer)
-			 * ovl -- 9
-			 * ovl -- 8 ---------------------------->gles_must_tail (pos2)
-			 * ovl -- 7
-			 * gpu -- 6 ------------>temp_gles_tail
-			 * gpu -- 5
-			 * gpu -- 4 ---------------------------->gles_must_tail (pos3)
-			 * gpu -- 3
-			 * gpu -- 2
-			 * gpu -- 1
-			 * gpu -- 0 ------------>temp_gles_head
-			 */
-			if (disp_info->gles_tail[disp_idx] > sec_layer_index) { /* pos1 */
-				/* top down can't handle this case, let normal flow do what it wants to do */
-			} else if (disp_info->gles_tail[disp_idx] <= temp_gles_tail) { /* pos3 */
-				/* gpu for blending can cover gpu must , perfect !!! */
-				available_ovl_num = 0;
-				disp_info->gles_head[disp_idx] = temp_gles_head;
-				disp_info->gles_tail[disp_idx] = temp_gles_tail;
-				*pavailable_ovl_num = available_ovl_num;
-				return 0;
-			} else {  /* pos2 */
-				/*
-				 * available_ovl_num = ovl_hw_limit - 1 - (disp_info->layer_num[disp_idx] -1 - disp_info->gles_tail[disp_idx])
-				 *                   = ovl_hw_limit - disp_info->layer_num[disp_idx] + disp_info->gles_tail[disp_idx]
-				 *                   = disp_info->gles_tail[disp_idx] - (disp_info->layer_num[disp_idx] - ovl_hw_limit)
-				 *                   = disp_info->gles_tail[disp_idx] - (temp_gles_tail)
-				 */
-				available_ovl_num = disp_info->gles_tail[disp_idx] - temp_gles_tail;
-				if (disp_info->gles_head[disp_idx] > available_ovl_num) {
-					disp_info->gles_head[disp_idx] = available_ovl_num;
-					available_ovl_num = 0;
-				} else {
-					available_ovl_num -= disp_info->gles_head[disp_idx];
-				}
-				*pavailable_ovl_num = available_ovl_num;
-				return 0;
-			}
-		}
-
-	}
-
-	return ret;
-}
-
 static int rollback_to_GPU(struct disp_layer_info *info,
 			   int disp, int available)
 {
@@ -883,13 +668,11 @@ static int rollback_to_GPU(struct disp_layer_info *info,
 	if (info->gles_head[disp] != -1)
 		has_gles_layer = true;
 
-	if (do_special_handling_for_sec_layer(info, disp, available, &available_ovl_num)) {
-		available_ovl_num = _rollback_to_GPU_bottom_up(info, disp,
-								available_ovl_num);
-		if (has_gles_layer)
-			available_ovl_num = _rollback_to_GPU_top_down(info,
-									disp, available_ovl_num);
-	}
+	available_ovl_num = _rollback_to_GPU_bottom_up(info, disp,
+						       available_ovl_num);
+	if (has_gles_layer)
+		available_ovl_num = _rollback_to_GPU_top_down(info,
+						disp, available_ovl_num);
 
 	/* Clear extended layer for all GLES layer */
 	for (i = info->gles_head[disp];
@@ -1815,10 +1598,7 @@ static int check_layering_result(struct disp_layer_info *info)
 
 int check_disp_info(struct disp_layer_info *disp_info)
 {
-	int disp_idx = 0;
-	int ghead = -1;
-	int gtail = -1;
-	int layer_num = 0;
+	int disp_idx, ghead, gtail;
 
 	if (disp_info == NULL) {
 		DISPERR("[HRT]disp_info is empty\n");
@@ -1826,14 +1606,8 @@ int check_disp_info(struct disp_layer_info *disp_info)
 	}
 
 	for (disp_idx = 0 ; disp_idx < 2 ; disp_idx++) {
-		layer_num = disp_info->layer_num[disp_idx];
 
-		if (layer_num < 0 || layer_num > DISP_LAYER_RULE_MAX_NUM) {
-			DISPERR("[HRT] disp_idx %d, invalid layer num %d\n", disp_idx, layer_num);
-			return -1;
-		}
-
-		if (layer_num > 0 &&
+		if (disp_info->layer_num[disp_idx] > 0 &&
 			disp_info->input_config[disp_idx] == NULL) {
 			DISPERR("[HRT]input config is empty,disp:%d,l_num:%d\n",
 				disp_idx, disp_info->layer_num[disp_idx]);
@@ -1842,14 +1616,11 @@ int check_disp_info(struct disp_layer_info *disp_info)
 
 		ghead = disp_info->gles_head[disp_idx];
 		gtail = disp_info->gles_tail[disp_idx];
-		if ((!((ghead == -1) && (gtail == -1)) && !((ghead >= 0) && (gtail >= 0))) ||
-			(ghead >= layer_num) ||
-			(gtail >= layer_num) ||
-			(ghead > gtail)) {
+		if ((ghead < 0 && gtail >= 0) || (gtail < 0 && ghead >= 0)) {
 			dump_disp_info(disp_info, DISP_DEBUG_LEVEL_ERR);
-			DISPERR("[HRT]gles invalid,disp:%d,head:%d,tail:%d,layer_num=%d\n",
+			DISPERR("[HRT]gles invalid,disp:%d,head:%d,tail:%d\n",
 				disp_idx, disp_info->gles_head[disp_idx],
-				disp_info->gles_tail[disp_idx], layer_num);
+				disp_info->gles_tail[disp_idx]);
 			return -1;
 		}
 	}
@@ -1865,7 +1636,8 @@ static int _copy_layer_info_from_disp(struct disp_layer_info *disp_info_user,
 	int ret = 0, layer_num = 0;
 
 	if (l_info->layer_num[disp_idx] <= 0)
-		return 0;
+		return -EFAULT;
+
 
 	layer_num = l_info->layer_num[disp_idx];
 	layer_size = sizeof(struct layer_config) * layer_num;
@@ -1873,8 +1645,8 @@ static int _copy_layer_info_from_disp(struct disp_layer_info *disp_info_user,
 		kzalloc(layer_size, GFP_KERNEL);
 
 	if (l_info->input_config[disp_idx] == NULL) {
-		DISPERR("[DISP][HRT]: alloc input config %d fail, layer_num:%d\n",
-				disp_idx, layering_info.layer_num[disp_idx]);
+		pr_info("[DISP][HRT]:alloc input config 0 fail, layer_num:%d\n",
+			l_info->layer_num[disp_idx]);
 		return -EFAULT;
 	}
 
@@ -1886,10 +1658,8 @@ static int _copy_layer_info_from_disp(struct disp_layer_info *disp_info_user,
 		if (copy_from_user(l_info->input_config[disp_idx],
 				disp_info_user->input_config[disp_idx],
 				layer_size)) {
-			DISPERR("[DISP][FB]: copy_from_user failed! line:%d\n",
+			pr_info("[DISP][FB]: copy_from_user failed! line:%d\n",
 				__LINE__);
-			kfree(l_info->input_config[disp_idx]);
-			l_info->input_config[disp_idx] = NULL;
 			return -EFAULT;
 		}
 	}
@@ -1899,18 +1669,10 @@ static int _copy_layer_info_from_disp(struct disp_layer_info *disp_info_user,
 
 int set_disp_info(struct disp_layer_info *disp_info_user, int debug_mode)
 {
-	struct disp_layer_info *l_info = &layering_info;
-
 	memcpy(&layering_info, disp_info_user, sizeof(struct disp_layer_info));
 
-	if (_copy_layer_info_from_disp(disp_info_user, debug_mode, 0) != 0)
-		return -EFAULT;
-
-	if (_copy_layer_info_from_disp(disp_info_user, debug_mode, 1) != 0) {
-		kfree(l_info->input_config[0]);
-		l_info->input_config[0] = NULL;
-		return -EFAULT;
-	}
+	_copy_layer_info_from_disp(disp_info_user, debug_mode, 0);
+	_copy_layer_info_from_disp(disp_info_user, debug_mode, 1);
 
 	l_rule_info->disp_path = HRT_PATH_UNKNOWN;
 	return 0;
@@ -1924,7 +1686,7 @@ static int _copy_layer_info_by_disp(struct disp_layer_info *disp_info_user,
 	int ret = 0;
 
 	if (l_info->layer_num[disp_idx] <= 0)
-		return 0;
+		return -EFAULT;
 
 	disp_info_user->gles_head[disp_idx] = l_info->gles_head[disp_idx];
 	disp_info_user->gles_tail[disp_idx] = l_info->gles_tail[disp_idx];
@@ -1935,11 +1697,10 @@ static int _copy_layer_info_by_disp(struct disp_layer_info *disp_info_user,
 	if (debug_mode) {
 		memcpy(disp_info_user->input_config[disp_idx],
 			l_info->input_config[disp_idx], layer_size);
-		kfree(l_info->input_config[disp_idx]);
 	} else {
 		if (copy_to_user(disp_info_user->input_config[disp_idx],
 				l_info->input_config[disp_idx], layer_size)) {
-			DISPERR("[DISP][FB]: copy_to_user failed! line:%d\n",
+			pr_info("[DISP][FB]: copy_to_user failed! line:%d\n",
 				__LINE__);
 			ret = -EFAULT;
 		}
@@ -1956,11 +1717,8 @@ int copy_layer_info_to_user(struct disp_layer_info *disp_info_user,
 	struct disp_layer_info *l_info = &layering_info;
 
 	disp_info_user->hrt_num = l_info->hrt_num;
-	if (_copy_layer_info_by_disp(disp_info_user, debug_mode, 0) != 0)
-		ret = -EFAULT;
-
-	if (_copy_layer_info_by_disp(disp_info_user, debug_mode, 1) != 0)
-		ret = -EFAULT;
+	_copy_layer_info_by_disp(disp_info_user, debug_mode, 0);
+	_copy_layer_info_by_disp(disp_info_user, debug_mode, 1);
 
 	return ret;
 }

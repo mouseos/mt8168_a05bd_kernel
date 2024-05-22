@@ -279,16 +279,9 @@ static ssize_t gadget_dev_desc_bcdUSB_store(struct config_item *item,
 
 static ssize_t gadget_dev_desc_UDC_show(struct config_item *item, char *page)
 {
-	struct gadget_info *gi = to_gadget_info(item);
-	char *udc_name;
-	int ret;
+	char *udc_name = to_gadget_info(item)->composite.gadget_driver.udc_name;
 
-	mutex_lock(&gi->lock);
-	udc_name = gi->composite.gadget_driver.udc_name;
-	ret = sprintf(page, "%s\n", udc_name ?: "");
-	mutex_unlock(&gi->lock);
-
-	return ret;
+	return sprintf(page, "%s\n", udc_name ?: "");
 }
 
 static int unregister_gadget(struct gadget_info *gi)
@@ -1654,7 +1647,8 @@ static void do_usb_state_monitor_work(struct work_struct *work)
 {
 	struct gadget_info *gi = dev_get_drvdata(android_device);
 	struct usb_composite_dev *cdev = &gi->cdev;
-	char *usb_state = "NO-DEV";
+	static char *usb_state = "NO-DEV";
+	static char *usb_state_last = "NO-DEV";
 	unsigned long flags;
 
 	spin_lock_irqsave(&cdev->lock, flags);
@@ -1666,7 +1660,10 @@ static void do_usb_state_monitor_work(struct work_struct *work)
 		usb_state = "DISCONNECTED";
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
-	pr_info("usb_state<%s>\n", usb_state);
+	if (!strcmp(usb_state, usb_state_last)) {
+		pr_info("usb_state<%s>\n", usb_state);
+		usb_state_last = usb_state;
+	}
 	schedule_delayed_work(&usb_state_monitor_dw,
 			msecs_to_jiffies(USB_STATE_MONITOR_DELAY));
 }

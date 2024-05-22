@@ -80,13 +80,6 @@
 #if !defined(CFG_LVTS_DOMINATOR)
 #define CFG_LVTS_DOMINATOR	0
 #endif
-#include <linux/reboot.h>
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-#include <linux/sign_of_life.h>
-#endif
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-#include <linux/thermal_framework.h>
-#endif
 
 /*=============================================================
  *Local variable definition
@@ -557,30 +550,6 @@ static int tscpu_get_crit_temp
 	return 0;
 }
 
-static int tscpu_thermal_notify(struct thermal_zone_device *thermal,
-				int trip, enum thermal_trip_type type)
-{
-#ifdef CONFIG_AMAZON_SIGN_OF_LIFE
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("[%s][%s]type:[%s] Thermal shutdown CPU, current temp=%d, trip=%d, trip_temp=%d\n",
-			__func__, dev_name(&thermal->device), thermal->type,
-			thermal->temperature, trip, trip_temp[trip]);
-		life_cycle_set_thermal_shutdown_reason(THERMAL_SHUTDOWN_REASON_SOC);
-	}
-#endif
-
-#ifdef CONFIG_THERMAL_SHUTDOWN_LAST_KMESG
-	if (type == THERMAL_TRIP_CRITICAL) {
-		pr_err("%s: thermal_shutdown notify\n", __func__);
-		last_kmsg_thermal_shutdown();
-		pr_err("%s: thermal_shutdown notify end\n", __func__);
-	}
-#endif
-	if (type == THERMAL_TRIP_CRITICAL)
-		set_shutdown_enable_dcap(&thermal->device);
-
-	return 0;
-}
 static int tscpu_get_temp
 (struct thermal_zone_device *thermal, int *t)
 {
@@ -690,7 +659,6 @@ static struct thermal_zone_device_ops mtktscpu_dev_ops = {
 	.get_trip_type = tscpu_get_trip_type,
 	.get_trip_temp = tscpu_get_trip_temp,
 	.get_crit_temp = tscpu_get_crit_temp,
-	.notify = tscpu_thermal_notify,
 };
 
 static int tscpu_read_Tj_out(struct seq_file *m, void *v)
@@ -1439,7 +1407,7 @@ static int tscpu_thermal_suspend
 	int cnt = 0;
 	int temp = 0;
 
-	tscpu_dprintk("%s\n", __func__);
+	tscpu_printk("%s\n", __func__);
 #if THERMAL_PERFORMANCE_PROFILE
 	struct timeval begin, end;
 	unsigned long val;
@@ -1516,7 +1484,7 @@ static int tscpu_thermal_resume(struct platform_device *dev)
 	int temp = 0;
 	int cnt = 0;
 
-	tscpu_dprintk("%s\n", __func__);
+	tscpu_printk("%s\n", __func__);
 
 	g_tc_resume = 1; /* set "1", don't read temp during start resume */
 

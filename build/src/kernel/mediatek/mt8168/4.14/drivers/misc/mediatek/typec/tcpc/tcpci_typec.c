@@ -89,6 +89,44 @@ static inline void typec_wait_ps_change(struct tcpc_device *tcpc_dev,
 static inline int typec_enable_low_power_mode(
 	struct tcpc_device *tcpc_dev, uint8_t pull);
 
+#define typec_get_cc1()		\
+	tcpc_dev->typec_remote_cc[0]
+#define typec_get_cc2()		\
+	tcpc_dev->typec_remote_cc[1]
+#define typec_get_cc_res()	\
+	(tcpc_dev->typec_polarity ? typec_get_cc2() : typec_get_cc1())
+
+#define typec_check_cc1(cc)	\
+	(typec_get_cc1() == cc)
+
+#define typec_check_cc2(cc)	\
+	(typec_get_cc2() == cc)
+
+#define typec_check_cc(cc1, cc2)	\
+	(typec_check_cc1(cc1) && typec_check_cc2(cc2))
+
+#define typec_check_cc_both(res)	\
+	(typec_check_cc(res, res))
+
+#define typec_check_cc_any(res)		\
+	(typec_check_cc1(res) || typec_check_cc2(res))
+
+#define typec_is_drp_toggling() \
+	(typec_get_cc1() == TYPEC_CC_DRP_TOGGLING)
+
+#define typec_is_cc_open()	\
+	typec_check_cc_both(TYPEC_CC_VOLT_OPEN)
+
+#define typec_is_cable_only()	\
+	(typec_get_cc1() + typec_get_cc2() == TYPEC_CC_VOLT_RA)
+
+#define typec_is_sink_with_emark()	\
+	(typec_get_cc1() + typec_get_cc2() == \
+	TYPEC_CC_VOLT_RA+TYPEC_CC_VOLT_RD)
+
+#define typec_is_cc_no_res()	\
+	(typec_is_drp_toggling() || typec_is_cc_open())
+
 static inline int typec_enable_vconn(struct tcpc_device *tcpc_dev)
 {
 #ifndef CONFIG_USB_POWER_DELIVERY
@@ -103,6 +141,80 @@ static inline int typec_enable_vconn(struct tcpc_device *tcpc_dev)
 
 	return tcpci_set_vconn(tcpc_dev, true);
 }
+
+/*
+ * [BLOCK] TYPEC Connection State Definition
+ */
+
+enum TYPEC_CONNECTION_STATE {
+	typec_disabled = 0,
+	typec_errorrecovery,
+
+	typec_unattached_snk,
+	typec_unattached_src,
+
+	typec_attachwait_snk,
+	typec_attachwait_src,
+
+	typec_attached_snk,
+	typec_attached_src,
+
+#ifdef CONFIG_TYPEC_CAP_TRY_SOURCE
+	/* Require : Assert Rp
+	 * Exit(-> Attached.SRC) : Detect Rd (tPDDebounce).
+	 * Exit(-> TryWait.SNK) : Not detect Rd after tDRPTry
+	 */
+	typec_try_src,
+
+	/* Require : Assert Rd
+	 * Exit(-> Attached.SNK) : Detect Rp (tCCDebounce) and Vbus present.
+	 * Exit(-> Unattached.SNK) : Not detect Rp (tPDDebounce)
+	 */
+
+	typec_trywait_snk,
+	typec_trywait_snk_pe,
+#endif
+
+#ifdef CONFIG_TYPEC_CAP_TRY_SINK
+
+	/* Require : Assert Rd
+	 * Wait for tDRPTry and only then begin monitoring CC.
+	 * Exit (-> Attached.SNK) : Detect Rp (tPDDebounce) and Vbus present.
+	 * Exit (-> TryWait.SRC) : Not detect Rp for tPDDebounce.
+	 */
+	typec_try_snk,
+
+	/*
+	 * Require : Assert Rp
+	 * Exit (-> Attached.SRC) : Detect Rd (tCCDebounce)
+	 * Exit (-> Unattached.SNK) : Not detect Rd after tDRPTry
+	 */
+
+	typec_trywait_src,
+	typec_trywait_src_pe,
+#endif	/* CONFIG_TYPEC_CAP_TRY_SINK */
+
+	typec_audioaccessory,
+	typec_debugaccessory,
+
+#ifdef CONFIG_TYPEC_CAP_DBGACC_SNK
+	typec_attached_dbgacc_snk,
+#endif	/* CONFIG_TYPEC_CAP_DBGACC_SNK */
+
+#ifdef CONFIG_TYPEC_CAP_CUSTOM_SRC
+	typec_attached_custom_src,
+#endif	/* CONFIG_TYPEC_CAP_CUSTOM_SRC */
+
+#ifdef CONFIG_TYPEC_CAP_NORP_SRC
+	typec_attached_norp_src,
+#endif	/* CONFIG_TYPEC_CAP_NORP_SRC */
+
+#ifdef CONFIG_TYPEC_CAP_ROLE_SWAP
+	typec_role_swap,
+#endif	/* CONFIG_TYPEC_CAP_ROLE_SWAP */
+
+	typec_unattachwait_pe,	/* Wait Policy Engine go to Idle */
+};
 
 static const char *const typec_state_name[] = {
 	"Disabled",
@@ -2525,10 +2637,4 @@ int tcpc_typec_init(struct tcpc_device *tcpc_dev, uint8_t typec_role)
 
 void  tcpc_typec_deinit(struct tcpc_device *tcpc_dev)
 {
-}
-
-bool tcpc_typec_is_unattached(struct tcpc_device *tcpc_dev)
-{
-	return (tcpc_dev->typec_state == typec_unattached_snk ||
-		tcpc_dev->typec_state == typec_unattached_src);
 }

@@ -167,11 +167,11 @@ int update_userlimit_cpu_freq(int kicker, int num_cluster
 	else
 #endif
 	{
-		policy = kcalloc(perfmgr_clusters, sizeof(struct cpufreq_policy *),
-				GFP_KERNEL);
+		policy = kcalloc(perfmgr_clusters,
+			sizeof(struct cpufreq_policy *), GFP_KERNEL);
 
 		if (!policy) {
-			perfmgr_trace_printk("cpu_ctrl", "return -ENOMEM 1\n");
+			mutex_unlock(&boost_freq);
 			return -ENOMEM;
 		}
 
@@ -289,8 +289,10 @@ static ssize_t perfmgr_boot_freq_proc_write(struct file *filp,
 	unsigned int arg_num = perfmgr_clusters * 2; /* for min and max */
 	char *tok, *tmp;
 	char *buf = perfmgr_copy_from_user_for_proc(ubuf, cnt);
+#ifdef CONFIG_MTK_CPU_FREQ
 	bool rev = (mt_cpufreq_get_freq_by_idx(0, MAX_NR_FREQ - 1) >
 		mt_cpufreq_get_freq_by_idx(0, 0)) ? true : false;
+#endif
 
 	freq_limit = kcalloc(perfmgr_clusters,
 			sizeof(struct ppm_limit_data), GFP_KERNEL);
@@ -309,7 +311,7 @@ static ssize_t perfmgr_boot_freq_proc_write(struct file *filp,
 			pr_debug("@%s: Invalid input: %s\n", __func__, tok);
 			goto out;
 		}
-
+#ifdef CONFIG_MTK_CPU_FREQ
 		if (i % 2) {/* max */
 			if (rev)
 				freq_limit[i/2].max =
@@ -338,6 +340,7 @@ static ssize_t perfmgr_boot_freq_proc_write(struct file *filp,
 						data);
 		}
 		i++;
+#endif
 	}
 
 	if (i < arg_num)

@@ -162,6 +162,8 @@ config ANDROID_DEFAULT_SETTING
 	select PPP_BSDCOMP
 	select PPP_DEFLATE
 	select PPP_MPPE
+	select PPPOLAC
+	select PPPOPNS
 	select PREEMPT
 	select PROC_FS
 	select PROFILING

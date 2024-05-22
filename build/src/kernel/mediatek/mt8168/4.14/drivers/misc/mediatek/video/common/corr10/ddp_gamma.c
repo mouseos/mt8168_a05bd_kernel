@@ -898,42 +898,6 @@ void disp_pq_notify_backlight_changed(int bl_1024)
 #endif
 }
 
-static int disp_ccorr_init_coef(
-	const struct DISP_CCORR_COEF_T *user_color_corr,
-		enum DISP_MODULE_ENUM module, void *cmdq)
-{
-	int ret = 0;
-	struct DISP_CCORR_COEF_T *ccorr = NULL;
-	enum disp_ccorr_id_t id;
-
-	ccorr = kmalloc(sizeof(struct DISP_CCORR_COEF_T), GFP_KERNEL);
-	if (ccorr == NULL) {
-		CCORR_ERR("no memory\n");
-		return -EFAULT;
-	}
-	memcpy(ccorr, user_color_corr, sizeof(struct DISP_CCORR_COEF_T));
-
-	id = ccorr->hw_id;
-	if (id >= 0 && id < DISP_CCORR_TOTAL) {
-		mutex_lock(&g_gamma_global_lock);
-
-		g_disp_ccorr_coef[id] = ccorr;
-
-		CCORR_DBG("Init module(%d) coef", module);
-		ret = disp_ccorr_write_coef_reg(cmdq, module, id, 0);
-
-		mutex_unlock(&g_gamma_global_lock);
-
-		disp_ccorr_trigger_refresh(id);
-	} else {
-		CCORR_ERR("invalid ID = %d\n", id);
-		ret = -EFAULT;
-		kfree(ccorr);
-	}
-
-	return ret;
-}
-
 static int disp_ccorr_set_coef
 	(const struct DISP_CCORR_COEF_T __user *user_color_corr,
 		enum DISP_MODULE_ENUM module, void *cmdq)
@@ -1169,8 +1133,6 @@ static int disp_ccorr_bypass(enum DISP_MODULE_ENUM module, int bypass)
 
 static int disp_ccorr_power_on(enum DISP_MODULE_ENUM module, void *handle)
 {
-	struct DISP_CCORR_COEF_T user_color_corr;
-
 #if defined(CONFIG_MACH_MT6759) || defined(CONFIG_MACH_MT6758) || \
 	defined(CONFIG_MACH_MT6763) || defined(CONFIG_MACH_MT6739) || \
 	defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || \
@@ -1199,14 +1161,6 @@ static int disp_ccorr_power_on(enum DISP_MODULE_ENUM module, void *handle)
 #endif
 
 	atomic_set(&g_ccorr_is_clock_on[index_of_ccorr(module)], 1);
-
-	if (g_disp_ccorr_coef[DISP_CCORR0] == NULL) {
-		user_color_corr.hw_id = DISP_CCORR0;
-		memcpy(user_color_corr.coef, g_ccorr_color_matrix,
-				sizeof(g_ccorr_color_matrix));
-		disp_ccorr_init_coef(&user_color_corr,
-				DISP_MODULE_CCORR0, handle);
-	}
 
 	return 0;
 }
@@ -1339,7 +1293,7 @@ static int ccorr_parse_coef(const char *cmd, enum DISP_MODULE_ENUM module,
 	int i, j, end;
 	bool stop = false;
 	int count = 0;
-	unsigned long temp = 0;
+	unsigned long temp;
 	unsigned int ccorr_coef[3][3];
 	char *next = (char *)cmd;
 

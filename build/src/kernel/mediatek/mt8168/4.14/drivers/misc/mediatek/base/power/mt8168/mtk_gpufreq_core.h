@@ -229,6 +229,8 @@ struct g_pmic_info {
 	struct regulator *reg_vcore;
 #ifdef CONFIG_MTK_QOS_SUPPORT
 	struct pm_qos_request pm_vgpu;
+	struct pm_qos_request pm_v_emi_gpu;
+
 #endif
 };
 

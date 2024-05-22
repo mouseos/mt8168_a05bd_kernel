@@ -120,11 +120,3 @@ config TS3A225E_ACCDET
 	  If you want to use TS3A225E
 	  say Y.
 	  If unsure, say N.
-
-config ACCDET_OMTP_CTIA_SWITCH_MANUAL
-        bool "MediaTek ACCDET driver"
-        ---help---
-          Switch IC - SD80 or FSA3157 - support for MediaTek SOC
-          If you want to use MediaTek ACCDET PIN SWAP,
-          say Y or M here.
-          If unsure, say N.

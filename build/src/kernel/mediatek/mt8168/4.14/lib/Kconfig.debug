@@ -410,15 +410,6 @@ config MAGIC_SYSRQ
 	  keys are documented in <file:Documentation/admin-guide/sysrq.rst>.
 	  Don't say Y unless you really know what this hack does.
 
-config MAGIC_SYSRQ_WD_TEST
-	bool "Trigger WatchDog reset test via SysRq interface"
-	depends on MAGIC_SYSRQ
-	default n
-	help
-	  If you say Y here, you can trigger WD reset as below
-	  $echo x > /proc/sysrq-trigger  (trigger softlockup and WD reset eventually)
-	  $echo y > /proc/sysrq-trigger  (triger a hard WD reset by disabling IRQ)
-
 config MAGIC_SYSRQ_DEFAULT_ENABLE
 	hex "Enable magic SysRq key functions by default"
 	depends on MAGIC_SYSRQ
