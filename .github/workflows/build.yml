@@ -1,0 +1,30 @@
+name: Build Kernel
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up APT packages
+      run: sudo apt-get update && sudo apt-get install -y \
+        git gnupg flex bison gperf build-essential zip curl \
+        zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
+        x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev \
+        libxml2-utils xsltproc unzip python lib32z1 lib32stdc++6 libssl-dev \
+        libswitch-perl swig maven libncurses5 xxd bc vim
+
+    - name: Execute build script
+      run: |
+        chmod +x ./build_kernel.sh
+        ./build_kernel.sh
