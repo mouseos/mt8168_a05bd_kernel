@@ -1,0 +1,23 @@
+config MTK_THERMAL_PA_VIA_ATCMD
+	bool "Thermal switch for query modem RF temp"
+	help
+	  Internal switch for thermal management
+	  to query modem RF temperature
+	  via AT command.
+	  (RIL sockets)
+
+config COOLER_ADAPTIVE_BTS
+	bool "Change the reference bts thermal zone for adaptive cooler"
+	help
+	  change mainboard thermal zone from MTK_THERMAL_SENSOR_AP
+	  to MTK_THERMAL_SENSOR_BTS0 for getting right ntc temperature
+	  and adaptive cooler.
+
+config CLATM_CHOOSE_HIGHER_TARGET_TJ
+	bool "adaptive cooler will choose the one who has higher target Tj"
+	help
+	  Change ATM decide TTj logic.
+	  It will choose the adaptive cooler with higher Target Tj
+	  and use the higher trip point as target Tj
+	  when more than one adaptive active.
+	default n

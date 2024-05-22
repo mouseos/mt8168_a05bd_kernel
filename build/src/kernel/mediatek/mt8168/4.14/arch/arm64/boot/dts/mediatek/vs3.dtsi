@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2017 MediaTek Inc.
+ * Author: Keene Tsai <keene.tsai@mediatek.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * Virtual sensor
+ * select_device: Decide to register which thermal_zone device
+ * 0: register to thermal_zone9, 1: register to thermal_zone10
+ */
+
+vs3: vs3 {
+	status = "disabled";
+	compatible = "amazon,vs3", "simple-bus";
+
+	virtual_sensor@2{
+		compatible = "amazon,virtual_sensor-thermal";
+		dev_id = <2>;
+		num_trips = <9>;
+		mode = <0>;
+		polling_delay = <3000>;
+		governor_name = "virtual_sensor";
+		num_tbps = <3>;
+		temp = <46000 47000 49000 50000 54000 56000 57000 58000 60000 60000 60000 60000>;
+		type = <0 0 0 0 0 0 0 0 3 3 3 3>;
+		hyst = <0 0 0 0 1000 0 0 0 0 0 0 0>;
+		num_cdevs = <1>;
+		cdev_names = "wpc_bcct0";
+	};
+
+	wpc_bcct@0 {
+		compatible = "amazon,wpc_cooler";
+		type = "wpc_bcct0";
+		state = <0>;
+		max_state = <12>;
+		level = <10000>;
+		thermal_cooler_id = <3>;
+		levels = <4500 3500 3000 0 0 0 0 0 0 0 0 0>;
+	};
+	thermal_battery@2 {
+		compatible = "amazon,virtual_sensor_thermal_sensor";
+		thermal_sensor,offset = <40400>;
+		thermal_sensor,offset_invert = <0>;
+		thermal_sensor,alpha = <682>;
+		thermal_sensor,weight = <89>;
+		thermal_sensor,weight_invert = <0>;
+		thermal_sensor_id = <1>;
+		aux_channel_num = <0>;
+		select_device = <2>;
+	};
+	/* Virtual sensor thermistor */
+	thermistor@20 {
+		compatible = "amazon,virtual_sensor_thermal_sensor";
+		thermal_sensor,offset = <51000>;
+		thermal_sensor,alpha = <1>;
+		thermal_sensor,weight = <0>;
+		thermal_sensor,weight_invert = <0>;
+		thermal_sensor,offset_invert = <0>;
+		thermal_sensor_id = <5>;
+		aux_channel_num = <0>;
+		select_device = <2>;
+	};
+	thermistor@21 {
+		compatible = "amazon,virtual_sensor_thermal_sensor";
+		thermal_sensor,offset = <40900>;
+		thermal_sensor,alpha = <1>;
+		thermal_sensor,weight = <121>;
+		thermal_sensor,weight_invert = <0>;
+		thermal_sensor,offset_invert = <0>;
+		thermal_sensor_id = <5>;
+		aux_channel_num = <1>;
+		select_device = <2>;
+	};
+	thermistor@22 {
+		compatible = "amazon,virtual_sensor_thermal_sensor";
+		thermal_sensor,offset = <53600>;
+		thermal_sensor,alpha = <147>;
+		thermal_sensor,weight = <0>;
+		thermal_sensor,weight_invert = <0>;
+		thermal_sensor,offset_invert = <0>;
+		thermal_sensor_id = <5>;
+		aux_channel_num = <2>;
+		select_device = <2>;
+	};
+	thermistor@23 {
+		compatible = "amazon,virtual_sensor_thermal_sensor";
+		thermal_sensor,offset = <10400>;
+		thermal_sensor,alpha = <271>;
+		thermal_sensor,weight = <772>;
+		thermal_sensor,weight_invert = <0>;
+		thermal_sensor,offset_invert = <1>;
+		thermal_sensor_id = <5>;
+		aux_channel_num = <3>;
+		select_device = <2>;
+	};
+};

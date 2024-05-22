@@ -1,0 +1,8 @@
+config MTK_MC34XX
+	bool "MC34xx for MediaTek package"
+	default n
+	help
+	  It support different accelerometer sensor.
+	  If this option is set,
+	  it will support
+	  MC34xx Accelerometer.

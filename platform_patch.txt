@@ -1,0 +1,32 @@
+diff -Naur platform/kernel/mediatek/mt8168/4.14/scripts/selinux/genheaders/genheaders.c platform.patch/kernel/mediatek/mt8168/4.14/scripts/selinux/genheaders/genheaders.c
+--- platform/kernel/mediatek/mt8168/4.14/scripts/selinux/genheaders/genheaders.c	2022-08-26 04:26:44.000000000 +0000
++++ platform.patch/kernel/mediatek/mt8168/4.14/scripts/selinux/genheaders/genheaders.c	2022-08-26 17:47:01.108156489 +0000
+@@ -9,7 +9,6 @@
+ #include <string.h>
+ #include <errno.h>
+ #include <ctype.h>
+-#include <sys/socket.h>
+ 
+ struct security_class_mapping {
+ 	const char *name;
+diff -Naur platform/kernel/mediatek/mt8168/4.14/scripts/selinux/mdp/mdp.c platform.patch/kernel/mediatek/mt8168/4.14/scripts/selinux/mdp/mdp.c
+--- platform/kernel/mediatek/mt8168/4.14/scripts/selinux/mdp/mdp.c	2022-08-26 04:25:12.000000000 +0000
++++ platform.patch/kernel/mediatek/mt8168/4.14/scripts/selinux/mdp/mdp.c	2022-08-26 17:46:35.784279693 +0000
+@@ -32,7 +32,6 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <string.h>
+-#include <sys/socket.h>
+ 
+ static void usage(char *name)
+ {
+diff -Naur platform/kernel/mediatek/mt8168/4.14/security/selinux/include/classmap.h platform.patch/kernel/mediatek/mt8168/4.14/security/selinux/include/classmap.h
+--- platform/kernel/mediatek/mt8168/4.14/security/selinux/include/classmap.h	2022-08-26 04:24:45.000000000 +0000
++++ platform.patch/kernel/mediatek/mt8168/4.14/security/selinux/include/classmap.h	2022-08-26 17:46:15.960376142 +0000
+@@ -1,5 +1,6 @@
+ /* SPDX-License-Identifier: GPL-2.0 */
+ #include <linux/capability.h>
++#include <linux/socket.h>
+ 
+ #define COMMON_FILE_SOCK_PERMS "ioctl", "read", "write", "create", \
+     "getattr", "setattr", "lock", "relabelfrom", "relabelto", "append", "map"

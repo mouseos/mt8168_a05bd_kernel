@@ -1,0 +1,7 @@
+PATCHING THE KERNEL
+===================
+When execute build_kernel.sh to build kernel, patches in file 'platform_patch.txt'
+are applied to solve the following build issues:
+
+1. When compiling genheaders and mdp from a newer host kernel, the following error
+   happens: "error: #error New address family defined, please update secclass_map."

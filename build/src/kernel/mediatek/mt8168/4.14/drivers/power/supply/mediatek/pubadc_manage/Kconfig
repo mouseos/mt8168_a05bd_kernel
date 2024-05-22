@@ -1,0 +1,5 @@
+config PUBADC_MANAGE
+	tristate "pubadc_manage driver"
+	default n
+	help
+	  Say Y here to enable support public adc management.

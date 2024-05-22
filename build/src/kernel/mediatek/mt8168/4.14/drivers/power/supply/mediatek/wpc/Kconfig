@@ -1,0 +1,6 @@
+config WPC_IDTP922X
+	tristate "idtp922X wireless power driver"
+	depends on I2C
+	default n
+	help
+		Say Y here to enable support for the idtp922X wireless power.
