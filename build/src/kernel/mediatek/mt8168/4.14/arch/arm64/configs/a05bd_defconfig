@@ -418,3 +418,7 @@ CONFIG_MTK_SECURITY_SW_SUPPORT=y
 
 #Enable lzma ramdisk
 CONFIG_RD_LZMA=y
+CONFIG_RD_GZIP=y
+
+#enable psi
+CONFIG_PSI=y
